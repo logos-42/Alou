@@ -1,0 +1,10 @@
+{
+  "name": "server-browser",
+  "command": "npx",
+  "args": [
+    "-y",
+    "@modelcontextprotocol/server-browser"
+  ],
+  "workingDirectory": "D:\\AI\\alou1\\mcp-services\\server-browser",
+  "env": {}
+}

@@ -17,42 +17,74 @@ export async function searchMCPServers(query: string): Promise<MCPServer[]> {
   // 实际使用时需要通过 MCP 协议调用
   console.log(`🔍 搜索 MCP 服务: ${query}`);
   
-  // 模拟返回结果
-  // 在实际环境中，这会调用真实的 MCP Compass 工具
-  return [
+  // 返回真实存在的 MCP 服务
+  const knownServers: MCPServer[] = [
     {
-      id: 'weather-service',
-      title: 'mcp-weather',
-      description: 'Weather service for MCP',
-      github_url: 'https://github.com/example/mcp-weather',
-      similarity_score: 0.85
+      id: 'server-browser',
+      title: '@modelcontextprotocol/server-browser',
+      description: 'Browser automation and web scraping MCP server',
+      github_url: 'https://github.com/modelcontextprotocol/servers',
+      similarity_score: query.includes('browser') || query.includes('web') ? 0.9 : 0.3
+    },
+    {
+      id: 'server-filesystem',
+      title: '@modelcontextprotocol/server-filesystem',
+      description: 'File system operations MCP server',
+      github_url: 'https://github.com/modelcontextprotocol/servers',
+      similarity_score: query.includes('file') || query.includes('文件') ? 0.9 : 0.3
+    },
+    {
+      id: 'server-fetch',
+      title: '@modelcontextprotocol/server-fetch',
+      description: 'HTTP fetch operations MCP server',
+      github_url: 'https://github.com/modelcontextprotocol/servers',
+      similarity_score: query.includes('fetch') || query.includes('http') || query.includes('api') ? 0.9 : 0.3
     }
   ];
+  
+  // 根据相似度排序
+  return knownServers
+    .filter(server => server.similarity_score > 0.2)
+    .sort((a, b) => b.similarity_score - a.similarity_score);
 }
 
 // MCP Installer - 安装现有服务
 export async function installMCPServer(name: string): Promise<string> {
   console.log(`📦 安装 MCP 服务: ${name}`);
   
-  return new Promise((resolve, reject) => {
-    // 使用 npx 安装 MCP 服务
-    const install = spawn('npx', [`@modelcontextprotocol/${name}`], {
-      shell: true,
-      stdio: 'inherit'
-    });
-
-    install.on('close', (code) => {
-      if (code === 0) {
-        resolve(`✅ 成功安装 ${name}`);
-      } else {
-        reject(new Error(`安装失败，退出码: ${code}`));
-      }
-    });
-
-    install.on('error', (err) => {
-      reject(err);
-    });
-  });
+  // 创建服务目录
+  const serverName = name.split('/').pop() || name;
+  const serverDir = path.join(process.cwd(), 'mcp-services', serverName);
+  await fs.mkdir(serverDir, { recursive: true });
+  
+  // 创建 package.json
+  const packageJson = {
+    name: serverName,
+    version: '1.0.0',
+    scripts: {
+      start: `npx -y ${name}`
+    },
+    dependencies: {}
+  };
+  
+  await fs.writeFile(
+    path.join(serverDir, 'package.json'),
+    JSON.stringify(packageJson, null, 2)
+  );
+  
+  // 创建 MCP 配置文件
+  const mcpConfig = {
+    name: serverName,
+    command: 'npx',
+    args: ['-y', name],
+    workingDirectory: serverDir,
+    env: {}
+  };
+  
+  const configPath = path.join(serverDir, 'mcp-config.json');
+  await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+  
+  return `✅ 成功配置 ${name} 服务\n📄 配置文件: ${configPath}`;
 }
 
 // MCP Create - 创建新服务
@@ -84,7 +116,8 @@ export async function createMCPServer(
         dev: 'tsx index.ts'
       },
       dependencies: {
-        '@modelcontextprotocol/sdk': '^1.0.0'
+        '@modelcontextprotocol/sdk': '^1.0.0',
+        'zod': '^3.0.0'
       },
       devDependencies: {
         'typescript': '^5.0.0',

@@ -89,12 +89,38 @@ export async function generateMCPCode(serviceType: string, keywords: string[]): 
 生成一个最小的 MCP TypeScript 服务代码，要求：
 - 服务类型：${serviceType}
 - 功能关键词：${keywords.join(', ')}
-- 使用 @modelcontextprotocol/sdk
+- 使用新版 @modelcontextprotocol/sdk (McpServer 类)
 - 包含一个示例工具
 - 代码要能直接运行
 
-只返回代码，不要包含其他说明文字。
+使用以下模板格式：
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+
+const server = new McpServer({
+  name: "${serviceType}-service",
+  version: "1.0.0"
+});
+
+server.tool("工具名",
+  { 参数: z.string().describe("参数描述") },
+  async ({ 参数 }) => ({
+    content: [{ type: "text", text: "结果" }]
+  })
+);
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch(console.error);
+
+只返回代码，不要包含markdown标记或其他说明文字。
 `;
 
-  return await askLLM(prompt);
+  const code = await askLLM(prompt);
+  // 移除可能的 markdown 标记
+  return code.replace(/^```\w*\n?|```$/gm, '').trim();
 } 
