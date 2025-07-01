@@ -1,0 +1,11 @@
+{
+  "todoist": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "todoist"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "mcp-task_management-1751271301067": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "tsx",
+      "index.ts"
+    ]
+  }
+}

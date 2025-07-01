@@ -1,0 +1,11 @@
+{
+  "calendar-autoauth-mcp-server": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "calendar-autoauth-mcp-server"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "swiss": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "swiss"
+    ]
+  }
+}

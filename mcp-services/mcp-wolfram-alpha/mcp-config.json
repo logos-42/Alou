@@ -1,0 +1,11 @@
+{
+  "mcp-wolfram-alpha": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "mcp-wolfram-alpha"
+    ]
+  }
+}

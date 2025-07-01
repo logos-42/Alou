@@ -60,11 +60,15 @@ export async function parseUserNeed(userInput: string): Promise<ParsedNeed> {
 分析用户需求并返回 JSON 格式的结果：
 用户说："${userInput}"
 
+判断规则：
+- 如果用户明确说"创建"、"新建"、"开发"、"编写"、"写一个"等词，action 设为 "create"
+- 否则 action 设为 "search"（优先搜索现有服务）
+
 请返回以下格式的 JSON（不要包含其他文字）：
 {
   "service_type": "服务类型（如 weather、translation、database 等）",
   "keywords": ["关键词1", "关键词2"],
-  "action": "search 或 create（优先搜索现有服务）",
+  "action": "search 或 create",
   "description": "用户需求的简短描述"
 }
 `;

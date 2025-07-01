@@ -1,0 +1,11 @@
+{
+  "elevenlabs-mcp-server": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "elevenlabs-mcp-server"
+    ]
+  }
+}

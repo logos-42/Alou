@@ -1,8 +1,0 @@
-{
-  "name": "server-browser",
-  "version": "1.0.0",
-  "scripts": {
-    "start": "npx -y @modelcontextprotocol/server-browser"
-  },
-  "dependencies": {}
-}
