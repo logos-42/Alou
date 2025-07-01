@@ -1,0 +1,12 @@
+{
+  "mcp-translation-1751378299521": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "tsx",
+      "index.ts"
+    ],
+    "cwd": "D:\\AI\\alou1\\mcp-services\\mcp-translation-1751378299521"
+  }
+}

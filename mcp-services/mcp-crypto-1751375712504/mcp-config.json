@@ -1,0 +1,11 @@
+{
+  "mcp-crypto-1751375712504": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "tsx",
+      "index.ts"
+    ]
+  }
+}

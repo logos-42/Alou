@@ -1,0 +1,11 @@
+{
+  "mcp-fashion-1751376789127": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "tsx",
+      "index.ts"
+    ]
+  }
+}

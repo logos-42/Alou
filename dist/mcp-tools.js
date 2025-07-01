@@ -332,86 +332,104 @@ async function installMCPServer(name) {
 💡 提示: 服务将在首次使用时自动下载并运行`;
 }
 // MCP Create - 创建新服务
-async function createMCPServer(language, code, serverName) {
+async function createMCPServer(language, code, serverName, serviceType) {
     console.log(`🛠️ 创建新的 MCP 服务: ${serverName}`);
     // 创建服务目录
     const serverDir = path_1.default.join(process.cwd(), 'mcp-services', serverName);
     await promises_1.default.mkdir(serverDir, { recursive: true });
     // 首先尝试调用真实的 MCP Create 服务
+    let mcpCreateSuccess = false;
+    let mcpCreateError = '';
+    let generatedCode = code; // 保存生成的代码
     try {
-        const createResult = await (0, mcp_client_js_1.callMCPCreate)(language, code);
+        const createResult = await (0, mcp_client_js_1.callMCPCreate)(language, code, serviceType);
         if (createResult && createResult.content) {
             // 解析创建结果
             if (Array.isArray(createResult.content)) {
                 for (const item of createResult.content) {
                     if (item.type === 'text' && item.text) {
-                        console.log('✅ MCP Create:', item.text);
-                        // 检查是否创建成功，可能返回了服务 ID 和配置路径
-                        try {
-                            const parsed = JSON.parse(item.text);
-                            if (parsed.serverId && parsed.configPath) {
-                                return {
-                                    serverId: parsed.serverId,
-                                    configPath: parsed.configPath
-                                };
+                        console.log('✅ MCP Create 返回:', item.text.substring(0, 200) + '...');
+                        // 检查是否返回了代码
+                        if (item.text.includes('```') || item.text.includes('import') || item.text.includes('from')) {
+                            // 提取生成的代码
+                            const codeMatch = item.text.match(/```(?:typescript|python|ts|py)?\n([\s\S]*?)```/);
+                            if (codeMatch) {
+                                generatedCode = codeMatch[1].trim();
+                                mcpCreateSuccess = true;
+                            }
+                            else if (item.text.includes('import') || item.text.includes('from')) {
+                                // 整个文本可能就是代码
+                                generatedCode = item.text.trim();
+                                mcpCreateSuccess = true;
                             }
                         }
-                        catch (e) {
-                            // 不是 JSON 格式，继续处理
+                        // 检查是否创建成功的其他标志
+                        if (item.text.includes('success') || item.text.includes('created') || item.text.includes('完成')) {
+                            mcpCreateSuccess = true;
                         }
                     }
                 }
             }
-            // 如果 MCP Create 成功但没有返回预期格式，仍然算成功
-            console.log('✅ MCP Create 执行成功，检查生成的文件...');
+            if (mcpCreateSuccess) {
+                console.log('✅ MCP Create 执行成功');
+            }
         }
     }
     catch (error) {
-        console.log('⚠️ MCP Create 调用失败，使用备用创建方案');
+        mcpCreateError = error.message || 'MCP Create 调用失败';
+        console.log('⚠️ MCP Create 调用失败:', mcpCreateError);
     }
-    // 检查是否已经创建了必要的文件
-    const packageJsonExists = await promises_1.default.access(path_1.default.join(serverDir, 'package.json')).then(() => true).catch(() => false);
-    if (!packageJsonExists) {
-        // 根据语言创建不同的文件
-        if (language === 'typescript') {
-            // 创建 TypeScript 服务文件
-            const serverFile = path_1.default.join(serverDir, 'index.ts');
-            await promises_1.default.writeFile(serverFile, code);
-            // 创建 package.json
-            const packageJson = {
-                name: serverName,
-                version: '1.0.0',
-                main: 'dist/index.js',
-                scripts: {
-                    build: 'tsc',
-                    start: 'node dist/index.js',
-                    dev: 'tsx index.ts'
-                },
-                dependencies: {
-                    '@modelcontextprotocol/sdk': '^1.0.0',
-                    'zod': '^3.0.0'
-                },
-                devDependencies: {
-                    'typescript': '^5.0.0',
-                    '@types/node': '^20.0.0',
-                    'tsx': '^4.0.0'
-                }
-            };
-            await promises_1.default.writeFile(path_1.default.join(serverDir, 'package.json'), JSON.stringify(packageJson, null, 2));
-            // 创建 tsconfig.json
-            const tsConfig = {
-                compilerOptions: {
-                    target: 'ES2022',
-                    module: 'Node16',
-                    moduleResolution: 'Node16',
-                    outDir: './dist',
-                    strict: true,
-                    esModuleInterop: true,
-                    skipLibCheck: true
-                }
-            };
-            await promises_1.default.writeFile(path_1.default.join(serverDir, 'tsconfig.json'), JSON.stringify(tsConfig, null, 2));
-        }
+    // 无论 MCP Create 是否成功，都创建必要的文件
+    console.log('📝 创建服务文件...');
+    if (language === 'typescript') {
+        // 创建 TypeScript 服务文件
+        const serverFile = path_1.default.join(serverDir, 'index.ts');
+        await promises_1.default.writeFile(serverFile, generatedCode);
+        // 创建 package.json
+        const packageJson = {
+            name: serverName,
+            version: '1.0.0',
+            main: 'dist/index.js',
+            scripts: {
+                build: 'tsc',
+                start: 'node dist/index.js',
+                dev: 'tsx index.ts'
+            },
+            dependencies: {
+                '@modelcontextprotocol/sdk': '^1.0.0',
+                'zod': '^3.0.0'
+            },
+            devDependencies: {
+                'typescript': '^5.0.0',
+                '@types/node': '^20.0.0',
+                'tsx': '^4.0.0'
+            }
+        };
+        await promises_1.default.writeFile(path_1.default.join(serverDir, 'package.json'), JSON.stringify(packageJson, null, 2));
+        // 创建 tsconfig.json
+        const tsConfig = {
+            compilerOptions: {
+                target: 'ES2022',
+                module: 'Node16',
+                moduleResolution: 'Node16',
+                outDir: './dist',
+                strict: true,
+                esModuleInterop: true,
+                skipLibCheck: true
+            }
+        };
+        await promises_1.default.writeFile(path_1.default.join(serverDir, 'tsconfig.json'), JSON.stringify(tsConfig, null, 2));
+    }
+    else {
+        // Python 服务创建逻辑
+        const serverFile = path_1.default.join(serverDir, 'server.py');
+        await promises_1.default.writeFile(serverFile, generatedCode);
+        // 创建 requirements.txt
+        const requirements = [
+            'mcp>=0.1.0',
+            'pydantic>=2.0.0'
+        ].join('\n');
+        await promises_1.default.writeFile(path_1.default.join(serverDir, 'requirements.txt'), requirements);
     }
     // 创建符合 MCP 官方格式的配置文件
     const isWindows = process.platform === 'win32';
@@ -429,19 +447,24 @@ async function createMCPServer(language, code, serverName) {
     }
     else {
         command = 'python';
-        args = ['index.py'];
+        args = ['server.py'];
     }
     const mcpConfig = {
         [serverName]: {
             command,
-            args
+            args,
+            cwd: serverDir // 添加工作目录
         }
     };
     const configPath = path_1.default.join(serverDir, 'mcp-config.json');
     await promises_1.default.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+    // 返回结果
     return {
         serverId: serverName,
-        configPath: configPath
+        configPath: configPath,
+        code: generatedCode, // 始终返回代码内容
+        success: mcpCreateSuccess,
+        error: mcpCreateSuccess ? undefined : (mcpCreateError || 'MCP Create 服务不可用，已使用本地方案创建')
     };
 }
 // 安装服务依赖

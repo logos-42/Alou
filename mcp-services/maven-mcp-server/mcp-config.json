@@ -1,0 +1,11 @@
+{
+  "maven-mcp-server": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "maven-mcp-server"
+    ]
+  }
+}

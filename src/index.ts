@@ -8,6 +8,8 @@ import {
 } from './mcp-tools.js';
 import path from 'path';
 import dotenv from 'dotenv';
+import fs from 'fs/promises';
+import { spawn } from 'child_process';
 
 // 加载环境变量
 dotenv.config();
@@ -46,16 +48,34 @@ export async function handleUserNeed(userInput: string): Promise<string> {
       const serverName = `mcp-${need.service_type}-${Date.now()}`;
       
       // 创建服务
-      const { serverId, configPath } = await createMCPServer('typescript', code, serverName);
+      const createResult = await createMCPServer('typescript', code, serverName, need.service_type);
       
       // 安装依赖
-      const serverDir = path.dirname(configPath);
+      const serverDir = path.dirname(createResult.configPath);
       await installDependencies(serverDir);
       
-      const configInstruction = generateConfigInstruction(serverId);
-      return `✅ 已成功创建新的 MCP 服务: ${serverId}
+      const configInstruction = generateConfigInstruction(createResult.serverId);
+      
+      // 检查是否使用了备用方案
+      if (!createResult.success && createResult.code) {
+        return `⚠️ MCP Create 服务不可用，已使用备用方案创建服务
+
+✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
 📁 服务目录: ${serverDir}
-📄 配置文件: ${configPath}
+📄 配置文件: ${createResult.configPath}
+📝 描述: ${need.description}
+
+💡 创建的服务代码:
+\`\`\`typescript
+${createResult.code}
+\`\`\`
+
+${configInstruction}`;
+      }
+      
+      return `✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
+📁 服务目录: ${serverDir}
+📄 配置文件: ${createResult.configPath}
 📝 描述: ${need.description}
 
 ${configInstruction}`;
@@ -156,16 +176,33 @@ ${configInstruction}`;
     const serverName = `mcp-${need.service_type}-${Date.now()}`;
     
     // 创建服务
-    const { serverId, configPath } = await createMCPServer('typescript', code, serverName);
+    const createResult = await createMCPServer('typescript', code, serverName, need.service_type);
     
     // 安装依赖
-    const serverDir = path.dirname(configPath);
+    const serverDir = path.dirname(createResult.configPath);
     await installDependencies(serverDir);
     
-    const configInstruction = generateConfigInstruction(serverId);
-    return `✅ 已成功创建新的 MCP 服务: ${serverId}
+    const configInstruction = generateConfigInstruction(createResult.serverId);
+    
+    // 检查是否使用了备用方案
+    if (!createResult.success && createResult.code) {
+      return `⚠️ MCP Create 服务不可用，已使用备用方案创建服务
+
+✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
 📁 服务目录: ${serverDir}
-📄 配置文件: ${configPath}
+📄 配置文件: ${createResult.configPath}
+
+💡 创建的服务代码:
+\`\`\`typescript
+${createResult.code}
+\`\`\`
+
+${configInstruction}`;
+    }
+    
+    return `✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
+📁 服务目录: ${serverDir}
+📄 配置文件: ${createResult.configPath}
 
 ${configInstruction}`;
     

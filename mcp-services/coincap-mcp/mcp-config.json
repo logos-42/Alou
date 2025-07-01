@@ -1,0 +1,11 @@
+{
+  "coincap-mcp": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "coincap-mcp"
+    ]
+  }
+}

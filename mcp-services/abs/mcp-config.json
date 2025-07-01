@@ -1,0 +1,11 @@
+{
+  "abs": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "abs"
+    ]
+  }
+}
