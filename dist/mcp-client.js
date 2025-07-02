@@ -160,20 +160,15 @@ async function callMCPCreate(language, code, serviceType) {
     // 尝试多个 MCP Create 服务
     const configs = [
         {
-            // 尝试原始的 MCP Create（如果存在）
-            command: 'npx',
-            args: ['-y', '@tesla0225/mcp-create']
-        },
-        {
-            // 备用方案 1：使用 @mcpdotdirect/create-mcp-server
-            command: 'npx',
-            args: ['-y', '@mcpdotdirect/create-mcp-server', '--skip-prompts']
-        },
-        {
-            // 备用方案 2：使用本地的 mcp-server-creator
+            // 备用方案 1：使用本地的 mcp-server-creator（优先）
             command: 'python',
             args: ['D:\\AI\\ALOU\\MCP-Server-Creator\\mcp_server_creator\\mcp_server_creator.py'],
             env: { MCP_TRANSPORT: 'stdio' }
+        },
+        {
+            // 备用方案 2：使用 @mcpdotdirect/create-mcp-server（脚手架工具）
+            command: 'npx',
+            args: ['-y', '@mcpdotdirect/create-mcp-server', '--skip-prompts']
         }
     ];
     for (let i = 0; i < configs.length; i++) {

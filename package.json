@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
+    "@alipay/mcp-server-alipay": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.13.2",
+    "@paypal/mcp": "^0.3.4",
     "accepts": "^2.0.0",
     "ajv": "^6.12.6",
     "axios": "^1.10.0",

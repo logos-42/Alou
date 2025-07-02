@@ -164,36 +164,59 @@ async function generateMCPCode(serviceType, keywords) {
 生成一个完整的 MCP TypeScript 服务代码，要求：
 - 服务类型：${serviceType}
 - 功能关键词：${keywords.join(', ')}
-- 使用新版 @modelcontextprotocol/sdk
+- 使用正确的 @modelcontextprotocol/sdk API
 - 包含至少一个实用的工具
 - 代码要能直接运行
 - 提供有意义的示例数据或模拟实现
 
-生成一个完整的 index.ts 文件，包含：
-1. 必要的导入
-2. 服务初始化
-3. 至少一个工具实现
-4. 合理的参数验证
-5. 有用的返回值
+重要：使用以下正确的 API 结构：
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
-只返回代码，不要包含markdown标记或其他说明文字。
+只返回 TypeScript 代码，不要包含任何 Python 代码或其他语言的代码。
+不要包含 markdown 标记或其他说明文字。
 `;
     try {
         const code = await askLLM(prompt);
-        // 移除可能的 markdown 标记
-        return code.replace(/^```\w*\n?|```$/gm, '').trim();
+        // 移除可能的 markdown 标记和 Python 代码
+        let cleanCode = code.replace(/^```\w*\n?|```$/gm, '').trim();
+        // 移除任何 Python 代码（如 if __name__ == "__main__"）
+        cleanCode = cleanCode.replace(/if\s+__name__\s*==\s*["']__main__["'][\s\S]*/g, '');
+        cleanCode = cleanCode.replace(/^\s*mcp\.run\(\).*$/gm, '');
+        return cleanCode.trim();
     }
     catch (error) {
         console.error('⚠️ LLM 生成代码失败，使用默认模板');
-        // 根据服务类型返回默认模板
+        // 根据服务类型返回正确的模板
         if (serviceType === 'crypto' || keywords.some(k => /bitcoin|ethereum|crypto|币/.test(k))) {
-            return `import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
+            return getCryptoTemplate();
+        }
+        else if (serviceType === 'translation' || keywords.some(k => /翻译|translate/.test(k))) {
+            return getTranslationTemplate();
+        }
+        else if (serviceType === 'video' || keywords.some(k => /视频|video/.test(k))) {
+            return getVideoTemplate();
+        }
+        // 默认通用模板
+        return getDefaultTemplate(serviceType);
+    }
+}
+// 加密货币服务模板
+function getCryptoTemplate() {
+    return `import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { 
+  CallToolRequestSchema, 
+  ListToolsRequestSchema 
+} from '@modelcontextprotocol/sdk/types.js';
 
-const server = new McpServer({
-  name: "crypto-price-service",
-  version: "1.0.0"
+const server = new Server({
+  name: 'crypto-price-service',
+  version: '1.0.0'
+}, {
+  capabilities: {
+    tools: {}
+  }
 });
 
 // 模拟的价格数据
@@ -204,73 +227,127 @@ const mockPrices: Record<string, number> = {
   USDT: 1
 };
 
-server.tool("get-crypto-price",
-  { 
-    symbol: z.string().describe("加密货币符号，如 BTC, ETH"), 
-    currency: z.string().default("USD").describe("法币单位，如 USD, CNY") 
-  },
-  async ({ symbol, currency }) => {
-    const upperSymbol = symbol.toUpperCase();
-    const price = mockPrices[upperSymbol];
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [{
+      name: 'get_crypto_price',
+      description: '获取加密货币价格',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          symbol: { type: 'string', description: '加密货币符号，如 BTC, ETH' },
+          currency: { type: 'string', default: 'USD', description: '法币单位' }
+        },
+        required: ['symbol']
+      }
+    }]
+  };
+});
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name === 'get_crypto_price') {
+    const symbol = (request.params.arguments.symbol as string).toUpperCase();
+    const currency = request.params.arguments.currency || 'USD';
+    const price = mockPrices[symbol];
     
     if (!price) {
       return {
         content: [{
-          type: "text",
+          type: 'text',
           text: \`未找到 \${symbol} 的价格数据。支持的币种：\${Object.keys(mockPrices).join(', ')}\`
         }]
       };
     }
     
-    // 简单的汇率转换
-    const exchangeRate = currency === "CNY" ? 7.2 : 1;
+    const exchangeRate = currency === 'CNY' ? 7.2 : 1;
     const convertedPrice = price * exchangeRate;
     
     return {
       content: [{
-        type: "text",
-        text: \`\${upperSymbol} 当前价格: \${convertedPrice.toFixed(2)} \${currency}\`
+        type: 'text',
+        text: \`\${symbol} 当前价格: \${convertedPrice.toFixed(2)} \${currency}\`
       }]
     };
   }
-);
-
-server.tool("list-supported-cryptos",
-  {},
-  async () => ({
-    content: [{
-      type: "text",
-      text: \`支持的加密货币：\${Object.keys(mockPrices).join(', ')}\`
-    }]
-  })
-);
-
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-}
-
-main().catch(console.error);`;
-        }
-        // 默认通用模板
-        return `import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
-
-const server = new McpServer({
-  name: "${serviceType}-service",
-  version: "1.0.0"
+  
+  throw new Error('Tool not found');
 });
 
-server.tool("example-tool",
-  { input: z.string().describe("输入参数") },
-  async ({ input }) => ({
-    content: [{
-      type: "text",
-      text: \`处理结果: \${input}\`
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch(console.error);`;
+}
+// 翻译服务模板
+function getTranslationTemplate() {
+    return `import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { 
+  CallToolRequestSchema, 
+  ListToolsRequestSchema 
+} from '@modelcontextprotocol/sdk/types.js';
+
+const server = new Server({
+  name: 'translation-service',
+  version: '1.0.0'
+}, {
+  capabilities: {
+    tools: {}
+  }
+});
+
+// 模拟翻译数据
+const translations: Record<string, Record<string, string>> = {
+  'hello': { 'zh': '你好', 'es': 'hola', 'fr': 'bonjour' },
+  'world': { 'zh': '世界', 'es': 'mundo', 'fr': 'monde' },
+  'thank you': { 'zh': '谢谢', 'es': 'gracias', 'fr': 'merci' }
+};
+
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [{
+      name: 'translate',
+      description: '翻译文本到指定语言',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: '要翻译的文本' },
+          targetLang: { type: 'string', description: '目标语言代码，如 zh, es, fr' }
+        },
+        required: ['text', 'targetLang']
+      }
     }]
-  })
-);
+  };
+});
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name === 'translate') {
+    const text = request.params.arguments.text as string;
+    const targetLang = request.params.arguments.targetLang as string;
+    
+    const translation = translations[text.toLowerCase()]?.[targetLang];
+    
+    if (translation) {
+      return {
+        content: [{
+          type: 'text',
+          text: \`翻译结果: \${translation}\`
+        }]
+      };
+    }
+    
+    return {
+      content: [{
+        type: 'text',
+        text: \`[模拟翻译] \${text} → [\${targetLang}]\`
+      }]
+    };
+  }
+  
+  throw new Error('Tool not found');
+});
 
 async function main() {
   const transport = new StdioServerTransport();
@@ -278,6 +355,140 @@ async function main() {
 }
 
 main().catch(console.error);`;
+}
+// 视频服务模板
+function getVideoTemplate() {
+    return `import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { 
+  CallToolRequestSchema, 
+  ListToolsRequestSchema 
+} from '@modelcontextprotocol/sdk/types.js';
+
+const server = new Server({
+  name: 'video-recommendation-service',
+  version: '1.0.0'
+}, {
+  capabilities: {
+    tools: {}
+  }
+});
+
+// 模拟视频数据
+const videos = [
+  { id: 'v001', title: '美丽风景合集', views: 1200000, category: 'travel' },
+  { id: 'v002', title: '搞笑动物集锦', views: 850000, category: 'funny' },
+  { id: 'v003', title: '美食制作教程', views: 950000, category: 'food' },
+  { id: 'v004', title: '健身训练指南', views: 680000, category: 'fitness' },
+  { id: 'v005', title: '科技产品评测', views: 1100000, category: 'tech' }
+];
+
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [{
+      name: 'recommend_videos',
+      description: '推荐好看的视频',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', description: '视频分类' },
+          limit: { type: 'number', default: 5, description: '返回数量' }
+        }
+      }
+    }]
+  };
+});
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name === 'recommend_videos') {
+    const category = request.params.arguments.category as string;
+    const limit = (request.params.arguments.limit as number) || 5;
+    
+    let filtered = videos;
+    if (category) {
+      filtered = videos.filter(v => v.category === category);
     }
+    
+    const recommended = filtered
+      .sort((a, b) => b.views - a.views)
+      .slice(0, limit);
+    
+    const result = recommended.map(v => 
+      \`• \${v.title} (\${v.views.toLocaleString()} 次观看)\`
+    ).join('\\n');
+    
+    return {
+      content: [{
+        type: 'text',
+        text: result || '没有找到相关视频'
+      }]
+    };
+  }
+  
+  throw new Error('Tool not found');
+});
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch(console.error);`;
+}
+// 默认模板
+function getDefaultTemplate(serviceType) {
+    return `import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { 
+  CallToolRequestSchema, 
+  ListToolsRequestSchema 
+} from '@modelcontextprotocol/sdk/types.js';
+
+const server = new Server({
+  name: '${serviceType}-service',
+  version: '1.0.0'
+}, {
+  capabilities: {
+    tools: {}
+  }
+});
+
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [{
+      name: 'example_tool',
+      description: 'An example tool',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          input: { type: 'string', description: 'Input parameter' }
+        },
+        required: ['input']
+      }
+    }]
+  };
+});
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name === 'example_tool') {
+    const input = request.params.arguments.input;
+    
+    return {
+      content: [{
+        type: 'text',
+        text: \`处理结果: \${input}\`
+      }]
+    };
+  }
+  
+  throw new Error('Tool not found');
+});
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch(console.error);`;
 }
 //# sourceMappingURL=llm.js.map

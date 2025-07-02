@@ -341,6 +341,7 @@ async function createMCPServer(language, code, serverName, serviceType) {
     let mcpCreateSuccess = false;
     let mcpCreateError = '';
     let generatedCode = code; // 保存生成的代码
+    let detectedLanguage = language; // 检测到的语言
     try {
         const createResult = await (0, mcp_client_js_1.callMCPCreate)(language, code, serviceType);
         if (createResult && createResult.content) {
@@ -357,10 +358,19 @@ async function createMCPServer(language, code, serverName, serviceType) {
                                 generatedCode = codeMatch[1].trim();
                                 mcpCreateSuccess = true;
                             }
-                            else if (item.text.includes('import') || item.text.includes('from')) {
+                            else if (item.text.includes('import') || item.text.includes('from') || item.text.includes('#!/usr/bin/env')) {
                                 // 整个文本可能就是代码
                                 generatedCode = item.text.trim();
                                 mcpCreateSuccess = true;
+                            }
+                            // 检测语言
+                            if (generatedCode.includes('#!/usr/bin/env python') || generatedCode.includes('from ') || generatedCode.includes('import ') && generatedCode.includes('def ')) {
+                                detectedLanguage = 'python';
+                                console.log('🐍 检测到 Python 代码');
+                            }
+                            else if (generatedCode.includes('import {') || generatedCode.includes('export ') || generatedCode.includes('const ') || generatedCode.includes('interface ')) {
+                                detectedLanguage = 'typescript';
+                                console.log('📘 检测到 TypeScript 代码');
                             }
                         }
                         // 检查是否创建成功的其他标志
@@ -379,9 +389,18 @@ async function createMCPServer(language, code, serverName, serviceType) {
         mcpCreateError = error.message || 'MCP Create 调用失败';
         console.log('⚠️ MCP Create 调用失败:', mcpCreateError);
     }
+    // 如果 MCP Create 返回的代码和原始代码混合了，只使用有效的部分
+    if (generatedCode.includes('import {') && generatedCode.includes('from ')) {
+        // 混合了 Python 和 TypeScript，提取 TypeScript 部分
+        const tsMatch = generatedCode.match(/import\s+{[\s\S]*$/);
+        if (tsMatch) {
+            generatedCode = tsMatch[0];
+            detectedLanguage = 'typescript';
+        }
+    }
     // 无论 MCP Create 是否成功，都创建必要的文件
     console.log('📝 创建服务文件...');
-    if (language === 'typescript') {
+    if (detectedLanguage === 'typescript') {
         // 创建 TypeScript 服务文件
         const serverFile = path_1.default.join(serverDir, 'index.ts');
         await promises_1.default.writeFile(serverFile, generatedCode);
@@ -426,6 +445,7 @@ async function createMCPServer(language, code, serverName, serviceType) {
         await promises_1.default.writeFile(serverFile, generatedCode);
         // 创建 requirements.txt
         const requirements = [
+            'fastmcp>=0.1.0',
             'mcp>=0.1.0',
             'pydantic>=2.0.0'
         ].join('\n');
@@ -435,7 +455,7 @@ async function createMCPServer(language, code, serverName, serviceType) {
     const isWindows = process.platform === 'win32';
     let command;
     let args;
-    if (language === 'typescript') {
+    if (detectedLanguage === 'typescript') {
         if (isWindows) {
             command = 'cmd';
             args = ['/c', 'npx', 'tsx', 'index.ts'];
@@ -470,24 +490,75 @@ async function createMCPServer(language, code, serverName, serviceType) {
 // 安装服务依赖
 async function installDependencies(serverPath) {
     console.log(`📥 安装依赖: ${serverPath}`);
-    return new Promise((resolve, reject) => {
-        const npmInstall = (0, child_process_1.spawn)('npm', ['install'], {
-            cwd: serverPath,
-            shell: true,
-            stdio: 'inherit'
+    // 检测语言类型
+    const hasPackageJson = await promises_1.default.access(path_1.default.join(serverPath, 'package.json')).then(() => true).catch(() => false);
+    const hasRequirements = await promises_1.default.access(path_1.default.join(serverPath, 'requirements.txt')).then(() => true).catch(() => false);
+    if (hasPackageJson) {
+        // Node.js/TypeScript 项目
+        return new Promise((resolve, reject) => {
+            const npmInstall = (0, child_process_1.spawn)('npm', ['install'], {
+                cwd: serverPath,
+                shell: true,
+                stdio: 'inherit'
+            });
+            npmInstall.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                }
+                else {
+                    reject(new Error(`npm 依赖安装失败，退出码: ${code}`));
+                }
+            });
+            npmInstall.on('error', (err) => {
+                reject(err);
+            });
         });
-        npmInstall.on('close', (code) => {
-            if (code === 0) {
-                resolve();
-            }
-            else {
-                reject(new Error(`依赖安装失败，退出码: ${code}`));
-            }
+    }
+    else if (hasRequirements) {
+        // Python 项目
+        console.log('🐍 检测到 Python 项目，安装 Python 依赖...');
+        return new Promise((resolve, reject) => {
+            const pipInstall = (0, child_process_1.spawn)('pip', ['install', '-r', 'requirements.txt'], {
+                cwd: serverPath,
+                shell: true,
+                stdio: 'inherit'
+            });
+            pipInstall.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                }
+                else {
+                    console.log('⚠️ pip 安装失败，尝试使用 pip3...');
+                    // 尝试使用 pip3
+                    const pip3Install = (0, child_process_1.spawn)('pip3', ['install', '-r', 'requirements.txt'], {
+                        cwd: serverPath,
+                        shell: true,
+                        stdio: 'inherit'
+                    });
+                    pip3Install.on('close', (code2) => {
+                        if (code2 === 0) {
+                            resolve();
+                        }
+                        else {
+                            console.log('⚠️ Python 依赖安装失败，但服务仍可能工作');
+                            resolve(); // 不阻止服务创建
+                        }
+                    });
+                    pip3Install.on('error', () => {
+                        console.log('⚠️ 未找到 pip3，跳过 Python 依赖安装');
+                        resolve(); // 不阻止服务创建
+                    });
+                }
+            });
+            pipInstall.on('error', () => {
+                console.log('⚠️ 未找到 pip，跳过 Python 依赖安装');
+                resolve(); // 不阻止服务创建
+            });
         });
-        npmInstall.on('error', (err) => {
-            reject(err);
-        });
-    });
+    }
+    else {
+        console.log('⚠️ 未找到依赖文件，跳过依赖安装');
+    }
 }
 // 启动 MCP 服务
 async function startMCPServer(configPath) {

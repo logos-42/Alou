@@ -1,0 +1,12 @@
+{
+  "mcp-food-1751379006237": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "tsx",
+      "index.ts"
+    ],
+    "cwd": "D:\\AI\\alou1\\mcp-services\\mcp-food-1751379006237"
+  }
+}
