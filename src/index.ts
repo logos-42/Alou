@@ -277,76 +277,46 @@ export async function startWebServer(port: number = 3000) {
 }
 
 // 等待用户按键的辅助函数
-async function waitForKeyPress(message: string = '按回车键退出...') {
+async function waitForKeyPress(message: string = '按任意键退出...') {
   if (!isPkg) return; // 非打包环境不需要等待
   
   console.log(`\n${message}`);
   
   // 创建一个简单的等待输入的 Promise
   return new Promise<void>((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-    
-    // 监听任何输入行
-    rl.on('line', () => {
-      rl.close();
-      resolve();
-    });
-    
-    // 监听关闭事件
-    rl.on('close', () => {
-      resolve();
-    });
-  });
-}
-
-// 交互式命令行界面
-async function runInteractive() {
-  console.log(`
-🤖 MCP Host - 智能 MCP 服务管理器
-
-输入你的需求，例如:
-  - "我需要一个天气查询服务"
-  - "帮我创建一个翻译服务"
-  - "安装股票查询服务"
-  
-输入 'exit' 或 'quit' 退出程序
-`);
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: '\n💬 请输入你的需求: '
-  });
-
-  rl.prompt();
-
-  rl.on('line', async (line) => {
-    const input = line.trim();
-    
-    if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
-      console.log('\n👋 再见！');
-      rl.close();
-      return;
+    // 如果是 Windows，设置原始模式以捕获单个按键
+    if (process.platform === 'win32' && process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+      
+      // 监听单个按键
+      const onData = () => {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener('data', onData);
+        resolve();
+      };
+      
+      process.stdin.on('data', onData);
+    } else {
+      // 非 Windows 或非 TTY 环境，使用 readline
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      
+      // 监听任何输入行
+      rl.on('line', () => {
+        rl.close();
+        resolve();
+      });
+      
+      // 监听关闭事件
+      rl.on('close', () => {
+        resolve();
+      });
     }
-    
-    if (input) {
-      try {
-        console.log('\n⏳ 正在处理...\n');
-        const result = await handleUserNeed(input);
-        console.log('\n' + result);
-      } catch (error) {
-        console.error('\n❌ 处理失败:', error);
-      }
-    }
-    
-    rl.prompt();
-  });
-
-  rl.on('close', () => {
-    process.exit(0);
   });
 }
 
@@ -355,8 +325,22 @@ async function runCLI() {
   const args = process.argv.slice(2);
   
   if (args.length === 0) {
-    // 无参数时进入交互模式
-    await runInteractive();
+    console.log(`
+🤖 MCP Host - 智能 MCP 服务管理器
+
+使用方法:
+  1. 直接运行: mcp-host "你的需求"
+  2. Web 服务: mcp-host --server [端口]
+  
+示例:
+  mcp-host "我需要一个天气查询服务"
+  mcp-host "帮我创建一个翻译服务"
+  mcp-host --server 3000
+
+
+`);
+    // 打包环境双击打开时，防止窗口一闪而过
+    await waitForKeyPress();
     return;
   }
   
