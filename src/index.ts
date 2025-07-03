@@ -1,4 +1,4 @@
-import { parseUserNeed, generateMCPCode } from './llm.js';
+import { parseUserNeed, generateMCPCode } from './llm-native.js';
 import { 
   searchMCPServers, 
   installMCPServer, 
@@ -6,13 +6,38 @@ import {
   installDependencies,
   startMCPServer 
 } from './mcp-tools.js';
-import path from 'path';
-import dotenv from 'dotenv';
-import fs from 'fs/promises';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs/promises';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+import * as readline from 'readline';
+
+// 为 pkg 添加类型声明
+declare global {
+  namespace NodeJS {
+    interface Process {
+      pkg?: any;
+    }
+  }
+}
+
+// 处理 pkg 打包后的路径问题
+const isPkg = typeof process.pkg !== 'undefined';
+const execDir = isPkg ? path.dirname(process.execPath) : process.cwd();
 
 // 加载环境变量
+// 在打包环境中，尝试从执行文件所在目录加载 .env
+if (isPkg) {
+  dotenv.config({ path: path.join(execDir, '.env') });
+} else {
 dotenv.config();
+}
+
+// 获取 mcp-services 目录路径
+function getMcpServicesDir(): string {
+  return path.join(execDir, 'mcp-services');
+}
 
 // 生成配置说明
 function generateConfigInstruction(serverName: string): string {
@@ -23,7 +48,7 @@ function generateConfigInstruction(serverName: string): string {
   return `
 🔧 要在 Cursor 中使用此服务，请将以下配置添加到 ${configPath}:
 
-查看生成的配置文件: mcp-services/${serverName.split('/').pop()}/mcp-config.json
+查看生成的配置文件: ${path.join(getMcpServicesDir(), serverName.split('/').pop() || serverName, 'mcp-config.json')}
 然后将其内容合并到你的主 mcp.json 文件的 "mcpServers" 部分。
 `;
 }
@@ -251,28 +276,87 @@ export async function startWebServer(port: number = 3000) {
   });
 }
 
+// 等待用户按键的辅助函数
+async function waitForKeyPress(message: string = '按回车键退出...') {
+  if (!isPkg) return; // 非打包环境不需要等待
+  
+  console.log(`\n${message}`);
+  
+  // 创建一个简单的等待输入的 Promise
+  return new Promise<void>((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    // 监听任何输入行
+    rl.on('line', () => {
+      rl.close();
+      resolve();
+    });
+    
+    // 监听关闭事件
+    rl.on('close', () => {
+      resolve();
+    });
+  });
+}
+
+// 交互式命令行界面
+async function runInteractive() {
+  console.log(`
+🤖 MCP Host - 智能 MCP 服务管理器
+
+输入你的需求，例如:
+  - "我需要一个天气查询服务"
+  - "帮我创建一个翻译服务"
+  - "安装股票查询服务"
+  
+输入 'exit' 或 'quit' 退出程序
+`);
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: '\n💬 请输入你的需求: '
+  });
+
+  rl.prompt();
+
+  rl.on('line', async (line) => {
+    const input = line.trim();
+    
+    if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
+      console.log('\n👋 再见！');
+      rl.close();
+      return;
+    }
+    
+    if (input) {
+      try {
+        console.log('\n⏳ 正在处理...\n');
+        const result = await handleUserNeed(input);
+        console.log('\n' + result);
+      } catch (error) {
+        console.error('\n❌ 处理失败:', error);
+      }
+    }
+    
+    rl.prompt();
+  });
+
+  rl.on('close', () => {
+    process.exit(0);
+  });
+}
+
 // CLI 接口
 async function runCLI() {
   const args = process.argv.slice(2);
   
   if (args.length === 0) {
-    console.log(`
-🤖 MCP Host - 智能 MCP 服务管理器
-
-使用方法:
-  1. 直接运行: tsx src/index.ts "你的需求"
-  2. Web 服务: tsx src/index.ts --server [端口]
-  
-示例:
-  tsx src/index.ts "我需要一个天气查询服务"
-  tsx src/index.ts "帮我创建一个翻译服务"
-  tsx src/index.ts --server 3000
-
-集成的 MCP 工具:
-  🔍 搜索: @liuyoshio/mcp-compass (通过 MCP 协议调用)
-  📦 安装: @anaisbetts/mcp-installer (通过 MCP 协议调用)
-  🛠️ 创建: @tesla0225/mcp-create (通过 MCP 协议调用)
-`);
+    // 无参数时进入交互模式
+    await runInteractive();
     return;
   }
   
@@ -283,6 +367,9 @@ async function runCLI() {
     const userInput = args.join(' ');
     const result = await handleUserNeed(userInput);
     console.log('\n' + result);
+    
+    // 打包环境下执行完任务后，等待用户按键再退出
+    await waitForKeyPress();
   }
 }
 
@@ -290,3 +377,6 @@ async function runCLI() {
 if (require.main === module) {
   runCLI().catch(console.error);
 } 
+
+// 导出 main 函数供 pkg 使用
+export const main = runCLI; 

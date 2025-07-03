@@ -1,8 +1,26 @@
 import { spawn, execSync } from 'child_process';
-import fs from 'fs/promises';
-import path from 'path';
-import { askLLM } from './llm.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { askLLM } from './llm-native.js';
 import { callMCPCompass, callMCPInstaller, callMCPCreate } from './mcp-client.js';
+
+// 为 pkg 添加类型声明
+declare global {
+  namespace NodeJS {
+    interface Process {
+      pkg?: any;
+    }
+  }
+}
+
+// 处理 pkg 打包后的路径问题
+const isPkg = typeof process.pkg !== 'undefined';
+const execDir = isPkg ? path.dirname(process.execPath) : process.cwd();
+
+// 获取 mcp-services 目录路径
+function getMcpServicesDir(): string {
+  return path.join(execDir, 'mcp-services');
+}
 
 // MCP 服务搜索结果接口
 export interface MCPServer {
@@ -261,7 +279,7 @@ export async function installMCPServer(name: string): Promise<string> {
               // MCP Installer 已经处理了安装，但我们仍需要创建本地配置
               console.log('📝 创建本地配置文件...');
               const serverName = name.split('/').pop() || name;
-              const serverDir = path.join(process.cwd(), 'mcp-services', serverName);
+              const serverDir = path.join(getMcpServicesDir(), serverName);
               await fs.mkdir(serverDir, { recursive: true });
               
               // 创建符合 MCP 官方格式的配置文件
@@ -294,7 +312,7 @@ export async function installMCPServer(name: string): Promise<string> {
   
   // 创建服务目录
   const serverName = name.split('/').pop() || name;
-  const serverDir = path.join(process.cwd(), 'mcp-services', serverName);
+  const serverDir = path.join(getMcpServicesDir(), serverName);
   await fs.mkdir(serverDir, { recursive: true });
   
   // 首先尝试使用 npx 确保包可以被下载和缓存
@@ -381,7 +399,7 @@ export async function createMCPServer(
   console.log(`🛠️ 创建新的 MCP 服务: ${serverName}`);
   
   // 创建服务目录
-  const serverDir = path.join(process.cwd(), 'mcp-services', serverName);
+  const serverDir = path.join(getMcpServicesDir(), serverName);
   await fs.mkdir(serverDir, { recursive: true });
   
   // 首先尝试调用真实的 MCP Create 服务

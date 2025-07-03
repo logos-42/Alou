@@ -1,5 +1,7 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+// @ts-nocheck
+/* eslint-disable @typescript-eslint/no-var-requires */
+const { McpServer } = require("@modelcontextprotocol/sdk/dist/cjs/server/mcp.js");
+const { StdioServerTransport } = require("@modelcontextprotocol/sdk/dist/cjs/server/stdio.js");
 import { z } from "zod";
 
 // 创建 MCP 服务器

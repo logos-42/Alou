@@ -1,10 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
-const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
+// @ts-nocheck
+/* eslint-disable @typescript-eslint/no-var-requires */
+const { McpServer } = require("@modelcontextprotocol/sdk/dist/cjs/server/mcp.js");
+const { StdioServerTransport } = require("@modelcontextprotocol/sdk/dist/cjs/server/stdio.js");
 const zod_1 = require("zod");
 // 创建 MCP 服务器
-const server = new mcp_js_1.McpServer({
+const server = new McpServer({
     name: "{{SERVICE_NAME}}",
     version: "1.0.0"
 });
@@ -19,7 +21,7 @@ server.tool("{{TOOL_NAME}}", {
 }));
 // 启动服务器
 async function main() {
-    const transport = new stdio_js_1.StdioServerTransport();
+    const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("MCP 服务已启动: {{SERVICE_NAME}}");
 }

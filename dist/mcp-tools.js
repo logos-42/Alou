@@ -1,7 +1,37 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.searchMCPServers = searchMCPServers;
 exports.installMCPServer = installMCPServer;
@@ -9,10 +39,17 @@ exports.createMCPServer = createMCPServer;
 exports.installDependencies = installDependencies;
 exports.startMCPServer = startMCPServer;
 const child_process_1 = require("child_process");
-const promises_1 = __importDefault(require("fs/promises"));
-const path_1 = __importDefault(require("path"));
-const llm_js_1 = require("./llm.js");
+const fs = __importStar(require("fs/promises"));
+const path = __importStar(require("path"));
+const llm_native_js_1 = require("./llm-native.js");
 const mcp_client_js_1 = require("./mcp-client.js");
+// 处理 pkg 打包后的路径问题
+const isPkg = typeof process.pkg !== 'undefined';
+const execDir = isPkg ? path.dirname(process.execPath) : process.cwd();
+// 获取 mcp-services 目录路径
+function getMcpServicesDir() {
+    return path.join(execDir, 'mcp-services');
+}
 // 检查 MCP 工具是否可用
 async function checkMCPTool(toolName) {
     try {
@@ -175,7 +212,7 @@ ${knownServers.map(s => `- ${s.title}: ${s.description}`).join('\n')}
 只返回 JSON，不要其他内容。
 `;
     try {
-        const result = await (0, llm_js_1.askLLM)(prompt);
+        const result = await (0, llm_native_js_1.askLLM)(prompt);
         console.log('🤖 LLM 返回:', result);
         // 清理 LLM 返回的内容，移除可能的 markdown 标记
         let cleanedResult = result.trim();
@@ -238,8 +275,8 @@ async function installMCPServer(name) {
                             // MCP Installer 已经处理了安装，但我们仍需要创建本地配置
                             console.log('📝 创建本地配置文件...');
                             const serverName = name.split('/').pop() || name;
-                            const serverDir = path_1.default.join(process.cwd(), 'mcp-services', serverName);
-                            await promises_1.default.mkdir(serverDir, { recursive: true });
+                            const serverDir = path.join(getMcpServicesDir(), serverName);
+                            await fs.mkdir(serverDir, { recursive: true });
                             // 创建符合 MCP 官方格式的配置文件
                             const isWindows = process.platform === 'win32';
                             const mcpConfig = {
@@ -250,8 +287,8 @@ async function installMCPServer(name) {
                                         : ['-y', name]
                                 }
                             };
-                            const configPath = path_1.default.join(serverDir, 'mcp-config.json');
-                            await promises_1.default.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+                            const configPath = path.join(serverDir, 'mcp-config.json');
+                            await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
                             return `✅ 成功安装 ${name} 服务\n${item.text}\n📄 配置文件: ${configPath}`;
                         }
                     }
@@ -266,8 +303,8 @@ async function installMCPServer(name) {
     console.log('📝 使用备用方案安装服务...');
     // 创建服务目录
     const serverName = name.split('/').pop() || name;
-    const serverDir = path_1.default.join(process.cwd(), 'mcp-services', serverName);
-    await promises_1.default.mkdir(serverDir, { recursive: true });
+    const serverDir = path.join(getMcpServicesDir(), serverName);
+    await fs.mkdir(serverDir, { recursive: true });
     // 首先尝试使用 npx 确保包可以被下载和缓存
     console.log(`📥 预下载 ${name} 包...`);
     try {
@@ -314,7 +351,7 @@ async function installMCPServer(name) {
             start: `npx -y ${name}`
         }
     };
-    await promises_1.default.writeFile(path_1.default.join(serverDir, 'package.json'), JSON.stringify(packageJson, null, 2));
+    await fs.writeFile(path.join(serverDir, 'package.json'), JSON.stringify(packageJson, null, 2));
     // 创建符合 MCP 官方格式的配置文件
     const isWindows = process.platform === 'win32';
     const mcpConfig = {
@@ -325,8 +362,8 @@ async function installMCPServer(name) {
                 : ['-y', name]
         }
     };
-    const configPath = path_1.default.join(serverDir, 'mcp-config.json');
-    await promises_1.default.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+    const configPath = path.join(serverDir, 'mcp-config.json');
+    await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
     return `✅ 成功安装 ${name} 服务
 📄 配置文件: ${configPath}
 💡 提示: 服务将在首次使用时自动下载并运行`;
@@ -335,8 +372,8 @@ async function installMCPServer(name) {
 async function createMCPServer(language, code, serverName, serviceType) {
     console.log(`🛠️ 创建新的 MCP 服务: ${serverName}`);
     // 创建服务目录
-    const serverDir = path_1.default.join(process.cwd(), 'mcp-services', serverName);
-    await promises_1.default.mkdir(serverDir, { recursive: true });
+    const serverDir = path.join(getMcpServicesDir(), serverName);
+    await fs.mkdir(serverDir, { recursive: true });
     // 首先尝试调用真实的 MCP Create 服务
     let mcpCreateSuccess = false;
     let mcpCreateError = '';
@@ -402,8 +439,8 @@ async function createMCPServer(language, code, serverName, serviceType) {
     console.log('📝 创建服务文件...');
     if (detectedLanguage === 'typescript') {
         // 创建 TypeScript 服务文件
-        const serverFile = path_1.default.join(serverDir, 'index.ts');
-        await promises_1.default.writeFile(serverFile, generatedCode);
+        const serverFile = path.join(serverDir, 'index.ts');
+        await fs.writeFile(serverFile, generatedCode);
         // 创建 package.json
         const packageJson = {
             name: serverName,
@@ -424,7 +461,7 @@ async function createMCPServer(language, code, serverName, serviceType) {
                 'tsx': '^4.0.0'
             }
         };
-        await promises_1.default.writeFile(path_1.default.join(serverDir, 'package.json'), JSON.stringify(packageJson, null, 2));
+        await fs.writeFile(path.join(serverDir, 'package.json'), JSON.stringify(packageJson, null, 2));
         // 创建 tsconfig.json
         const tsConfig = {
             compilerOptions: {
@@ -437,19 +474,19 @@ async function createMCPServer(language, code, serverName, serviceType) {
                 skipLibCheck: true
             }
         };
-        await promises_1.default.writeFile(path_1.default.join(serverDir, 'tsconfig.json'), JSON.stringify(tsConfig, null, 2));
+        await fs.writeFile(path.join(serverDir, 'tsconfig.json'), JSON.stringify(tsConfig, null, 2));
     }
     else {
         // Python 服务创建逻辑
-        const serverFile = path_1.default.join(serverDir, 'server.py');
-        await promises_1.default.writeFile(serverFile, generatedCode);
+        const serverFile = path.join(serverDir, 'server.py');
+        await fs.writeFile(serverFile, generatedCode);
         // 创建 requirements.txt
         const requirements = [
             'fastmcp>=0.1.0',
             'mcp>=0.1.0',
             'pydantic>=2.0.0'
         ].join('\n');
-        await promises_1.default.writeFile(path_1.default.join(serverDir, 'requirements.txt'), requirements);
+        await fs.writeFile(path.join(serverDir, 'requirements.txt'), requirements);
     }
     // 创建符合 MCP 官方格式的配置文件
     const isWindows = process.platform === 'win32';
@@ -476,8 +513,8 @@ async function createMCPServer(language, code, serverName, serviceType) {
             cwd: serverDir // 添加工作目录
         }
     };
-    const configPath = path_1.default.join(serverDir, 'mcp-config.json');
-    await promises_1.default.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+    const configPath = path.join(serverDir, 'mcp-config.json');
+    await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
     // 返回结果
     return {
         serverId: serverName,
@@ -491,8 +528,8 @@ async function createMCPServer(language, code, serverName, serviceType) {
 async function installDependencies(serverPath) {
     console.log(`📥 安装依赖: ${serverPath}`);
     // 检测语言类型
-    const hasPackageJson = await promises_1.default.access(path_1.default.join(serverPath, 'package.json')).then(() => true).catch(() => false);
-    const hasRequirements = await promises_1.default.access(path_1.default.join(serverPath, 'requirements.txt')).then(() => true).catch(() => false);
+    const hasPackageJson = await fs.access(path.join(serverPath, 'package.json')).then(() => true).catch(() => false);
+    const hasRequirements = await fs.access(path.join(serverPath, 'requirements.txt')).then(() => true).catch(() => false);
     if (hasPackageJson) {
         // Node.js/TypeScript 项目
         return new Promise((resolve, reject) => {
@@ -562,7 +599,7 @@ async function installDependencies(serverPath) {
 }
 // 启动 MCP 服务
 async function startMCPServer(configPath) {
-    const config = JSON.parse(await promises_1.default.readFile(configPath, 'utf-8'));
+    const config = JSON.parse(await fs.readFile(configPath, 'utf-8'));
     console.log(`🚀 启动 MCP 服务: ${config.name}`);
     const serverProcess = (0, child_process_1.spawn)(config.command, [], {
         cwd: config.workingDirectory,

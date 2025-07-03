@@ -4,7 +4,7 @@
   "main": "index.js",
   "dependencies": {
     "@alipay/mcp-server-alipay": "^1.4.0",
-    "@modelcontextprotocol/sdk": "^1.13.2",
+    "@modelcontextprotocol/sdk": "^1.13.3",
     "@paypal/mcp": "^0.3.4",
     "accepts": "^2.0.0",
     "ajv": "^6.12.6",
@@ -101,15 +101,37 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "server": "tsx src/index.ts --server",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "tsc",
+    "compile:standalone": "tsc src/standalone.ts --outDir dist",
+    "package": "npm run compile && pkg .",
+    "package:win": "npm run compile && pkg . --targets node18-win-x64 --output mcp-host.exe",
+    "package:mac": "npm run compile && pkg . --targets node18-macos-x64 --output mcp-host",
+    "package:all": "npm run compile && pkg . --targets node18-win-x64,node18-macos-x64,node18-linux-x64 --output-path dist/bin",
+    "package:standalone": "npm run compile:standalone && pkg dist/standalone.js --targets node18-win-x64 --output mcp-host-standalone.exe"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^24.0.7",
+    "pkg": "^5.8.1",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^6.0.1",
+    "webpack-node-externals": "^3.0.0"
   },
-  "description": ""
+  "description": "",
+  "pkg": {
+    "assets": [
+      "node_modules/@modelcontextprotocol/sdk/dist/cjs/**/*",
+      "node_modules/dotenv/**/*"
+    ],
+    "scripts": "dist/**/*.js",
+    "targets": ["node18-win-x64"],
+    "outputPath": ".",
+    "compress": "GZip"
+  },
+  "bin": "dist/cli.js"
 }

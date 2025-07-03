@@ -4,8 +4,11 @@ exports.createMCPClient = createMCPClient;
 exports.callMCPCompass = callMCPCompass;
 exports.callMCPInstaller = callMCPInstaller;
 exports.callMCPCreate = callMCPCreate;
-const index_js_1 = require("@modelcontextprotocol/sdk/client/index.js");
-const stdio_js_1 = require("@modelcontextprotocol/sdk/client/stdio.js");
+// @ts-nocheck
+/* eslint-disable @typescript-eslint/no-var-requires */
+// 使用动态 require，避免 TypeScript 导入解析问题
+const { Client } = require('@modelcontextprotocol/sdk/dist/cjs/client/index.js');
+const { StdioClientTransport } = require('@modelcontextprotocol/sdk/dist/cjs/client/stdio.js');
 // 创建 MCP 客户端连接
 async function createMCPClient(command, args, env) {
     // 过滤掉 undefined 的环境变量
@@ -15,12 +18,12 @@ async function createMCPClient(command, args, env) {
             processEnv[key] = value;
         }
     }
-    const transport = new stdio_js_1.StdioClientTransport({
+    const transport = new StdioClientTransport({
         command: command,
         args: args || [],
         env: { ...processEnv, ...env }
     });
-    const client = new index_js_1.Client({
+    const client = new Client({
         name: 'mcp-host-client',
         version: '1.0.0'
     }, {

@@ -1,16 +1,61 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.main = void 0;
 exports.handleUserNeed = handleUserNeed;
 exports.startWebServer = startWebServer;
-const llm_js_1 = require("./llm.js");
+const llm_native_js_1 = require("./llm-native.js");
 const mcp_tools_js_1 = require("./mcp-tools.js");
-const path_1 = __importDefault(require("path"));
-const dotenv_1 = __importDefault(require("dotenv"));
+const path = __importStar(require("path"));
+const dotenv = __importStar(require("dotenv"));
+const readline = __importStar(require("readline"));
+// 处理 pkg 打包后的路径问题
+const isPkg = typeof process.pkg !== 'undefined';
+const execDir = isPkg ? path.dirname(process.execPath) : process.cwd();
 // 加载环境变量
-dotenv_1.default.config();
+// 在打包环境中，尝试从执行文件所在目录加载 .env
+if (isPkg) {
+    dotenv.config({ path: path.join(execDir, '.env') });
+}
+else {
+    dotenv.config();
+}
+// 获取 mcp-services 目录路径
+function getMcpServicesDir() {
+    return path.join(execDir, 'mcp-services');
+}
 // 生成配置说明
 function generateConfigInstruction(serverName) {
     const configPath = process.platform === 'win32'
@@ -19,7 +64,7 @@ function generateConfigInstruction(serverName) {
     return `
 🔧 要在 Cursor 中使用此服务，请将以下配置添加到 ${configPath}:
 
-查看生成的配置文件: mcp-services/${serverName.split('/').pop()}/mcp-config.json
+查看生成的配置文件: ${path.join(getMcpServicesDir(), serverName.split('/').pop() || serverName, 'mcp-config.json')}
 然后将其内容合并到你的主 mcp.json 文件的 "mcpServers" 部分。
 `;
 }
@@ -28,19 +73,19 @@ async function handleUserNeed(userInput) {
     try {
         console.log('👤 用户需求:', userInput);
         // 1. 解析用户需求
-        const need = await (0, llm_js_1.parseUserNeed)(userInput);
+        const need = await (0, llm_native_js_1.parseUserNeed)(userInput);
         console.log('🧠 解析结果:', need);
         // 如果用户明确要求创建新服务，直接跳到创建步骤
         if (need.action === 'create') {
             console.log('🛠️ 用户要求创建新服务，跳过搜索步骤...');
             // 生成服务代码
-            const code = await (0, llm_js_1.generateMCPCode)(need.service_type, need.keywords);
+            const code = await (0, llm_native_js_1.generateMCPCode)(need.service_type, need.keywords);
             // 生成服务名称
             const serverName = `mcp-${need.service_type}-${Date.now()}`;
             // 创建服务
             const createResult = await (0, mcp_tools_js_1.createMCPServer)('typescript', code, serverName, need.service_type);
             // 安装依赖
-            const serverDir = path_1.default.dirname(createResult.configPath);
+            const serverDir = path.dirname(createResult.configPath);
             await (0, mcp_tools_js_1.installDependencies)(serverDir);
             const configInstruction = generateConfigInstruction(createResult.serverId);
             // 检查是否使用了备用方案
@@ -127,7 +172,7 @@ ${configInstruction}`;
                     }
                 }
                 // 如果所有尝试都失败了，提供手动安装说明
-                const serverDir = path_1.default.join(process.cwd(), 'mcp-services', serverName);
+                const serverDir = path.join(process.cwd(), 'mcp-services', serverName);
                 return `⚠️ 无法通过 MCP Installer 自动安装该服务
 
 📦 服务信息:
@@ -147,13 +192,13 @@ ${configInstruction}`;
         // 4. 创建新服务
         console.log('🔨 未找到合适的现有服务，开始创建新服务...');
         // 生成服务代码
-        const code = await (0, llm_js_1.generateMCPCode)(need.service_type, need.keywords);
+        const code = await (0, llm_native_js_1.generateMCPCode)(need.service_type, need.keywords);
         // 生成服务名称
         const serverName = `mcp-${need.service_type}-${Date.now()}`;
         // 创建服务
         const createResult = await (0, mcp_tools_js_1.createMCPServer)('typescript', code, serverName, need.service_type);
         // 安装依赖
-        const serverDir = path_1.default.dirname(createResult.configPath);
+        const serverDir = path.dirname(createResult.configPath);
         await (0, mcp_tools_js_1.installDependencies)(serverDir);
         const configInstruction = generateConfigInstruction(createResult.serverId);
         // 检查是否使用了备用方案
@@ -215,27 +260,75 @@ async function startWebServer(port = 3000) {
         console.log(`📍 API 端点: POST http://localhost:${port}/api/handle-need`);
     });
 }
+// 等待用户按键的辅助函数
+async function waitForKeyPress(message = '按回车键退出...') {
+    if (!isPkg)
+        return; // 非打包环境不需要等待
+    console.log(`\n${message}`);
+    // 创建一个简单的等待输入的 Promise
+    return new Promise((resolve) => {
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+        // 监听任何输入行
+        rl.on('line', () => {
+            rl.close();
+            resolve();
+        });
+        // 监听关闭事件
+        rl.on('close', () => {
+            resolve();
+        });
+    });
+}
+// 交互式命令行界面
+async function runInteractive() {
+    console.log(`
+🤖 MCP Host - 智能 MCP 服务管理器
+
+输入你的需求，例如:
+  - "我需要一个天气查询服务"
+  - "帮我创建一个翻译服务"
+  - "安装股票查询服务"
+  
+输入 'exit' 或 'quit' 退出程序
+`);
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: '\n💬 请输入你的需求: '
+    });
+    rl.prompt();
+    rl.on('line', async (line) => {
+        const input = line.trim();
+        if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
+            console.log('\n👋 再见！');
+            rl.close();
+            return;
+        }
+        if (input) {
+            try {
+                console.log('\n⏳ 正在处理...\n');
+                const result = await handleUserNeed(input);
+                console.log('\n' + result);
+            }
+            catch (error) {
+                console.error('\n❌ 处理失败:', error);
+            }
+        }
+        rl.prompt();
+    });
+    rl.on('close', () => {
+        process.exit(0);
+    });
+}
 // CLI 接口
 async function runCLI() {
     const args = process.argv.slice(2);
     if (args.length === 0) {
-        console.log(`
-🤖 MCP Host - 智能 MCP 服务管理器
-
-使用方法:
-  1. 直接运行: tsx src/index.ts "你的需求"
-  2. Web 服务: tsx src/index.ts --server [端口]
-  
-示例:
-  tsx src/index.ts "我需要一个天气查询服务"
-  tsx src/index.ts "帮我创建一个翻译服务"
-  tsx src/index.ts --server 3000
-
-集成的 MCP 工具:
-  🔍 搜索: @liuyoshio/mcp-compass (通过 MCP 协议调用)
-  📦 安装: @anaisbetts/mcp-installer (通过 MCP 协议调用)
-  🛠️ 创建: @tesla0225/mcp-create (通过 MCP 协议调用)
-`);
+        // 无参数时进入交互模式
+        await runInteractive();
         return;
     }
     if (args[0] === '--server') {
@@ -246,10 +339,14 @@ async function runCLI() {
         const userInput = args.join(' ');
         const result = await handleUserNeed(userInput);
         console.log('\n' + result);
+        // 打包环境下执行完任务后，等待用户按键再退出
+        await waitForKeyPress();
     }
 }
 // 如果直接运行此文件
 if (require.main === module) {
     runCLI().catch(console.error);
 }
+// 导出 main 函数供 pkg 使用
+exports.main = runCLI;
 //# sourceMappingURL=index.js.map
