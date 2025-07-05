@@ -6,6 +6,10 @@ export interface ParsedNeed {
   keywords: string[];
   action: 'search' | 'create';
   description: string;
+  // 新增: 深层需求、推荐工作流与工具（可选）
+  deep_need?: string;
+  workflows?: { name: string; steps: string[] }[];
+  mcp_tools?: { name: string; description: string }[];
 }
 
 // LLM 配置接口
@@ -21,7 +25,7 @@ export async function askLLM(prompt: string, config?: LLMConfig): Promise<any> {
   const apiKey = config?.apiKey || process.env.LLM_API_KEY || 'sk-392a95fc7d2445f6b6c79c17725192d1';
   // 修正 DeepSeek API URL - 根据官方文档
   const apiUrl = config?.apiUrl || process.env.LLM_API_URL || 'https://api.deepseek.com/chat/completions';
-  const model = config?.model || process.env.LLM_MODEL || 'deepseek-chat';
+  const model = config?.model || process.env.LLM_MODEL || 'deepseek-reasoner';
 
   console.log('🤖 调用 LLM API...');
   console.log('📍 API URL:', apiUrl);
@@ -122,19 +126,40 @@ export async function parseUserNeed(userInput: string): Promise<ParsedNeed> {
   console.log('🔍 开始解析用户需求...');
   
   const prompt = `
-分析用户需求并返回 JSON 格式的结果：
+请深度分析以下需求，识别用户在实现目标过程中可能遇到的所有隐性困难和痛点。
 用户说："${userInput}"
 
-判断规则：
-- 如果用户明确说"创建"、"新建"、"开发"、"编写"、"写一个"等词，action 设为 "create"
-- 否则 action 设为 "search"（优先搜索现有服务）
+分析维度：
+1. 表面需求 vs 深层动机
+2. 用户可能不知道的前置条件和准备工作
+3. 执行过程中的常见困难和陷阱
+4. 需要的专业知识和技能门槛
+5. 资源获取和质量判断难题
+6. 进度评估和反馈机制缺失
+7. 遇到问题时的解决路径
+8. 长期坚持的动力和方法
 
-请返回以下格式的 JSON（不要包含其他文字）：
+基于人类经验和专业知识，预判用户将需要哪些具体工具来解决每个环节的问题。
+
+返回 JSON 格式：
 {
-  "service_type": "服务类型（如 weather、translation、database 等）",
-  "keywords": ["关键词1", "关键词2"],
-  "action": "search 或 create",
-  "description": "进行深入思考后的用户需求的洞察与描述"
+  "service_type": "领域类型",
+  "keywords": ["核心关键词"],
+  "action": "search" | "create",
+  "description": "需求概述",
+  "deep_need": "深层动机和终极目标",
+  "workflows": [
+    {
+      "name": "阶段名称",
+      "steps": ["具体步骤"]
+    }
+  ],
+  "mcp_tools": [
+    {
+      "name": "具体工具名（解决什么具体问题）",
+      "description": "如何帮助用户克服该环节的困难"
+    }
+  ]
 }
 `;
 
@@ -173,8 +198,93 @@ export async function parseUserNeed(userInput: string): Promise<ParsedNeed> {
   }
 }
 
+// 分析学习需求的深层痛点
+export async function analyzeLearningNeeds(userInput: string): Promise<ParsedNeed> {
+  const prompt = `
+请深入分析以下学习需求，识别所有隐性痛点和具体需求。
+用户说："${userInput}"
+
+请从以下维度分析：
+1. 学习前准备（如何选择设备、材料等）
+2. 基础知识获取（理论学习、技能入门）
+3. 实践技能培养（练习方法、技巧掌握）
+4. 进度评估反馈（如何知道自己的水平）
+5. 问题解决支持（遇到困难如何解决）
+6. 持续动力维持（如何保持学习热情）
+
+返回 JSON 格式：
+{
+  "service_type": "learning-assistant",
+  "keywords": ["具体技能关键词"],
+  "action": "search",
+  "description": "用户的学习需求概述",
+  "deep_need": "深层学习动机和终极目标",
+  "workflows": [
+    {
+      "name": "学习阶段名称",
+      "steps": ["具体步骤"]
+    }
+  ],
+  "mcp_tools": [
+    {
+      "name": "具体工具名称（如：小提琴选购助手）",
+      "description": "解决什么具体问题"
+    }
+  ]
+}
+`;
+
+  try {
+    const result = await askLLM(prompt);
+    const parsed = JSON.parse(result);
+    return parsed;
+  } catch (e) {
+    console.error('⚠️ 深度分析失败，使用标准解析');
+    return parseUserNeed(userInput);
+  }
+}
+
 // 生成 MCP 服务代码
-export async function generateMCPCode(serviceType: string, keywords: string[]): Promise<string> {
+export async function generateMCPCode(serviceType: string, keywords: string[], need?: ParsedNeed): Promise<string> {
+  // 如果有深度分析结果，使用更详细的提示词
+  if (need && need.mcp_tools && need.mcp_tools.length > 0) {
+    const tools = need.mcp_tools.map((t: any) => 
+      typeof t === 'string' ? t : `${t.name}: ${t.description}`
+    ).slice(0, 3); // 选择前3个最重要的工具
+    
+    const prompt = `
+生成一个完整的 MCP TypeScript 服务代码。
+
+服务信息：
+- 类型：${serviceType}
+- 描述：${need.description}
+- 深层需求：${need.deep_need}
+
+必须实现的工具（选择最重要的3个）：
+${tools.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+要求：
+- 使用 @modelcontextprotocol/sdk 的正确 API
+- 每个工具都要有完整的实现逻辑（不可以是模拟数据）
+- 包含详细的输入参数验证
+- 返回结构化的有用信息
+- 代码要专业且可直接运行
+
+只返回 TypeScript 代码，不要包含其他说明。
+`;
+
+    try {
+      const code = await askLLM(prompt);
+      let cleanCode = code.replace(/^```\w*\n?|```$/gm, '').trim();
+      cleanCode = cleanCode.replace(/if\s+__name__\s*==\s*["']__main__["'][\s\S]*/g, '');
+      cleanCode = cleanCode.replace(/^\s*mcp\.run\(\).*$/gm, '');
+      return cleanCode.trim();
+    } catch (error) {
+      console.error('⚠️ 基于深度分析生成代码失败，使用标准生成');
+    }
+  }
+  
+  // 原有的生成逻辑
   const prompt = `
 生成一个完整的 MCP TypeScript 服务代码，要求：
 - 服务类型：${serviceType}

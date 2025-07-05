@@ -1,4 +1,5 @@
-import { parseUserNeed, generateMCPCode } from './llm-native.js';
+import { parseUserNeed } from './llm-native.js';
+import { generateMCPCode } from './llm.js';
 import { 
   searchMCPServers, 
   installMCPServer, 
@@ -12,6 +13,7 @@ import * as fs from 'fs/promises';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import * as readline from 'readline';
+import { ServiceManager } from './service-manager.js';
 
 // 为 pkg 添加类型声明
 declare global {
@@ -62,12 +64,45 @@ export async function handleUserNeed(userInput: string): Promise<string> {
     const need = await parseUserNeed(userInput);
     console.log('🧠 解析结果:', need);
     
+    // 格式化需求详情（含深层需求、工作流、工具）
+    const formatNeedDetails = (n: any): string => {
+      let s = '';
+      if (n.description) s += `📝 描述: ${n.description}\n`;
+      if (n.deep_need) s += `🔍 深层需求: ${n.deep_need}\n`;
+      if (n.workflows && n.workflows.length) {
+        s += '📋 推荐工作流程:\n';
+        for (const wf of n.workflows) {
+          // 处理字符串数组格式的工作流
+          if (typeof wf === 'string') {
+            s += `  • ${wf}\n`;
+          } else if (wf.name && wf.steps) {
+            const steps = Array.isArray(wf.steps) ? wf.steps.join(' → ') : '';
+            s += `  • ${wf.name}: ${steps}\n`;
+          }
+        }
+      }
+      if (n.mcp_tools && n.mcp_tools.length) {
+        s += '🛠️ 关键 MCP 工具:\n';
+        for (const t of n.mcp_tools) {
+          // 处理字符串数组格式的工具
+          if (typeof t === 'string') {
+            s += `  • ${t}\n`;
+          } else if (t.name && t.description) {
+            s += `  • ${t.name}: ${t.description}\n`;
+          }
+        }
+      }
+      return s.trim();
+    };
+
+    const needDetails = formatNeedDetails(need);
+    
     // 如果用户明确要求创建新服务，直接跳到创建步骤
     if (need.action === 'create') {
       console.log('🛠️ 用户要求创建新服务，跳过搜索步骤...');
       
       // 生成服务代码
-      const code = await generateMCPCode(need.service_type, need.keywords);
+      const code = await generateMCPCode(need.service_type, need.keywords, need);
       
       // 生成服务名称
       const serverName = `mcp-${need.service_type}-${Date.now()}`;
@@ -88,8 +123,7 @@ export async function handleUserNeed(userInput: string): Promise<string> {
 ✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
 📁 服务目录: ${serverDir}
 📄 配置文件: ${createResult.configPath}
-📝 描述: ${need.description}
-
+${needDetails ? needDetails + '\n\n' : ''}
 💡 创建的服务代码:
 \`\`\`typescript
 ${createResult.code}
@@ -101,7 +135,7 @@ ${configInstruction}`;
       return `✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
 📁 服务目录: ${serverDir}
 📄 配置文件: ${createResult.configPath}
-📝 描述: ${need.description}
+${needDetails ? needDetails + '\n' : ''}
 
 ${configInstruction}`;
     }
@@ -195,7 +229,7 @@ ${configInstruction}`;
     console.log('🔨 未找到合适的现有服务，开始创建新服务...');
     
     // 生成服务代码
-    const code = await generateMCPCode(need.service_type, need.keywords);
+    const code = await generateMCPCode(need.service_type, need.keywords, need);
     
     // 生成服务名称
     const serverName = `mcp-${need.service_type}-${Date.now()}`;
@@ -216,7 +250,7 @@ ${configInstruction}`;
 ✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
 📁 服务目录: ${serverDir}
 📄 配置文件: ${createResult.configPath}
-
+${needDetails ? needDetails + '\n\n' : ''}
 💡 创建的服务代码:
 \`\`\`typescript
 ${createResult.code}
@@ -228,6 +262,7 @@ ${configInstruction}`;
     return `✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
 📁 服务目录: ${serverDir}
 📄 配置文件: ${createResult.configPath}
+${needDetails ? needDetails + '\n' : ''}
 
 ${configInstruction}`;
     
@@ -282,65 +317,114 @@ async function waitForKeyPress(message: string = '按任意键退出...') {
   
   console.log(`\n${message}`);
   
-  // 创建一个简单的等待输入的 Promise
   return new Promise<void>((resolve) => {
-    // 如果是 Windows，设置原始模式以捕获单个按键
     if (process.platform === 'win32' && process.stdin.isTTY) {
       process.stdin.setRawMode(true);
       process.stdin.resume();
       process.stdin.setEncoding('utf8');
-      
-      // 监听单个按键
       const onData = () => {
         process.stdin.setRawMode(false);
         process.stdin.pause();
         process.stdin.removeListener('data', onData);
         resolve();
       };
-      
       process.stdin.on('data', onData);
     } else {
-      // 非 Windows 或非 TTY 环境，使用 readline
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-      
-      // 监听任何输入行
-      rl.on('line', () => {
-        rl.close();
-        resolve();
-      });
-      
-      // 监听关闭事件
-      rl.on('close', () => {
-        resolve();
-      });
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      rl.on('line', () => { rl.close(); resolve(); });
+      rl.on('close', () => resolve());
     }
   });
+}
+
+// 交互式 CLI，允许用户连续输入需求
+function interactiveCLI() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  console.log('💬 请输入你的需求，输入 exit 退出:\n');
+  const prompt = () => {
+    rl.question('> ', async (answer) => {
+      const trimmed = answer.trim();
+      if (trimmed.toLowerCase() === 'exit' || trimmed.toLowerCase() === 'quit') {
+        rl.close();
+        return;
+      }
+      if (trimmed.length === 0) {
+        // 空输入，重新提示
+        prompt();
+        return;
+      }
+      try {
+        const result = await handleUserNeed(trimmed);
+        console.log('\n' + result + '\n');
+      } catch (err) {
+        console.error('处理失败:', err);
+      }
+      prompt();
+    });
+  };
+  rl.on('close', async () => {
+    // 交互式会话结束后，在打包环境中等待用户按键再退出，避免闪退
+    await waitForKeyPress();
+  });
+  prompt();
 }
 
 // CLI 接口
 async function runCLI() {
   const args = process.argv.slice(2);
   
+  // 预加载服务
+  const serviceManager = new ServiceManager();
+  await serviceManager.loadAll();
+
+  // 管理命令
+  if (args[0] === 'list') {
+    const list = serviceManager.list();
+    console.log('\n📋 已登记服务（* 代表运行中）');
+    list.forEach(i => console.log(` ${i.running ? '•*' : '• '} ${i.name}`));
+    await waitForKeyPress();
+    return;
+  }
+  if (args[0] === 'start' && args[1]) {
+    await serviceManager.start(args[1]);
+    console.log(`✅ 服务 ${args[1]} 已启动`);
+    await waitForKeyPress();
+    return;
+  }
+  if (args[0] === 'stop' && args[1]) {
+    await serviceManager.stop(args[1]);
+    console.log(`🛑 服务 ${args[1]} 已停止`);
+    await waitForKeyPress();
+    return;
+  }
+  if (args[0] === 'call' && args.length >= 3) {
+    const [ , svc, tool, ...rest ] = args;
+    let toolArgs: any = {};
+    if (rest.length) {
+      try { toolArgs = JSON.parse(rest.join(' ')); } catch { console.log('⚠️ 参数 JSON 解析失败，使用空对象'); }
+    }
+    const result = await serviceManager.call(svc, tool, toolArgs);
+    console.log(JSON.stringify(result, null, 2));
+    await waitForKeyPress();
+    return;
+  }
+  
   if (args.length === 0) {
     console.log(`
 🤖 MCP Host - 智能 MCP 服务管理器
 
 使用方法:
-  1. 直接运行: mcp-host "你的需求"
-  2. Web 服务: mcp-host --server [端口]
+  1. 直接输入需求后按回车 (交互式模式)
+  2. 先输入 exit 退出交互式模式
+  3. Web 服务: mcp-host --server [端口]
   
 示例:
-  mcp-host "我需要一个天气查询服务"
-  mcp-host "帮我创建一个翻译服务"
+  我需要一个天气查询服务
+  帮我创建一个翻译服务
   mcp-host --server 3000
-
-
 `);
-    // 打包环境双击打开时，防止窗口一闪而过
-    await waitForKeyPress();
+    // 启动交互式模式
+    interactiveCLI();
     return;
   }
   
@@ -351,7 +435,6 @@ async function runCLI() {
     const userInput = args.join(' ');
     const result = await handleUserNeed(userInput);
     console.log('\n' + result);
-    
     // 打包环境下执行完任务后，等待用户按键再退出
     await waitForKeyPress();
   }

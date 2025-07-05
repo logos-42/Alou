@@ -1,0 +1,12 @@
+{
+  "mcp-Stock Analysis Assistant-1751694642741": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "tsx",
+      "index.ts"
+    ],
+    "cwd": "D:\\AI\\alou1\\mcp-services\\mcp-Stock Analysis Assistant-1751694642741"
+  }
+}

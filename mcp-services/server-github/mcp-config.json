@@ -1,0 +1,11 @@
+{
+  "server-github": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "@modelcontextprotocol/server-github"
+    ]
+  }
+}

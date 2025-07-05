@@ -1,0 +1,11 @@
+{
+  "mcp-geo": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "mcp-geo"
+    ]
+  }
+}

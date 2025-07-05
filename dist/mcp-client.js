@@ -7,8 +7,16 @@ exports.callMCPCreate = callMCPCreate;
 // @ts-nocheck
 /* eslint-disable @typescript-eslint/no-var-requires */
 // 使用动态 require，避免 TypeScript 导入解析问题
-const { Client } = require('@modelcontextprotocol/sdk/dist/cjs/client/index.js');
-const { StdioClientTransport } = require('@modelcontextprotocol/sdk/dist/cjs/client/stdio.js');
+let Client;
+let StdioClientTransport;
+try {
+    ({ Client } = require('@modelcontextprotocol/sdk/dist/cjs/client/index.js'));
+    ({ StdioClientTransport } = require('@modelcontextprotocol/sdk/dist/cjs/client/stdio.js'));
+}
+catch (_) {
+    ({ Client } = require('@modelcontextprotocol/sdk/client/index.js'));
+    ({ StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js'));
+}
 // 创建 MCP 客户端连接
 async function createMCPClient(command, args, env) {
     // 过滤掉 undefined 的环境变量
@@ -18,10 +26,13 @@ async function createMCPClient(command, args, env) {
             processEnv[key] = value;
         }
     }
+    // 从 env 中提取 cwd
+    const { cwd, ...restEnv } = env || {};
     const transport = new StdioClientTransport({
         command: command,
         args: args || [],
-        env: { ...processEnv, ...env }
+        env: { ...processEnv, ...restEnv },
+        cwd: cwd
     });
     const client = new Client({
         name: 'mcp-host-client',

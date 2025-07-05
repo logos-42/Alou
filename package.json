@@ -105,7 +105,7 @@
     "compile": "tsc",
     "compile:standalone": "tsc src/standalone.ts --outDir dist",
     "package": "npm run compile && pkg .",
-    "package:win": "npm run compile && pkg . --targets node18-win-x64 --output mcp-host.exe",
+    "package:win": "npm run compile && pkg dist/index.js --targets node18-win-x64 --output mcp-host.exe",
     "package:mac": "npm run compile && pkg . --targets node18-macos-x64 --output mcp-host",
     "package:all": "npm run compile && pkg . --targets node18-win-x64,node18-macos-x64,node18-linux-x64 --output-path dist/bin",
     "package:standalone": "npm run compile:standalone && pkg dist/standalone.js --targets node18-win-x64 --output mcp-host-standalone.exe"
@@ -125,7 +125,7 @@
   "description": "",
   "pkg": {
     "assets": [
-      "node_modules/@modelcontextprotocol/sdk/dist/cjs/**/*",
+      "node_modules/@modelcontextprotocol/sdk/**/*",
       "node_modules/dotenv/**/*"
     ],
     "scripts": "dist/**/*.js",
@@ -133,5 +133,5 @@
     "outputPath": ".",
     "compress": "GZip"
   },
-  "bin": "dist/cli.js"
+  "bin": "dist/index.js"
 }

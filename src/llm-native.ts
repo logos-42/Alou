@@ -12,6 +12,9 @@ export interface ParsedNeed {
   keywords: string[];
   action: 'search' | 'create';
   description: string;
+  deep_need?: string;
+  workflows?: { name: string; steps: string[] }[];
+  mcp_tools?: { name: string; description: string }[];
 }
 
 export interface LLMConfig {
@@ -55,7 +58,7 @@ function httpsRequest(urlStr: string, data: string, headers: Record<string, stri
 export async function askLLM(prompt: string, config?: Partial<LLMConfig>): Promise<string> {
   const apiKey = config?.apiKey || process.env.LLM_API_KEY || '';
   const apiUrl = config?.apiUrl || process.env.LLM_API_URL || 'https://api.deepseek.com/chat/completions';
-  const model  = config?.model  || process.env.LLM_MODEL   || 'deepseek-chat';
+  const model  = config?.model  || process.env.LLM_MODEL   || 'deepseek-reasoner';
 
   const payload = JSON.stringify({
     model,
@@ -80,7 +83,7 @@ export async function askLLM(prompt: string, config?: Partial<LLMConfig>): Promi
 }
 
 export async function parseUserNeed(userInput: string): Promise<ParsedNeed> {
-  const prompt = `分析用户需求并返回 JSON 结果，字段：service_type, keywords, action("search"|"create"), description。用户说："${userInput}"`;
+  const prompt = `请深度分析以下需求，识别用户在实现目标过程中可能遇到的所有隐性困难和痛点。基于人类经验和专业知识，预判用户将需要哪些具体工具。输出 JSON（不要包含其他文字），字段：service_type, keywords, action("search"|"create"), description, deep_need, workflows, mcp_tools。用户说:"${userInput}"`;
   try {
     const res = await askLLM(prompt);
     const obj = JSON.parse(res.match(/\{[\s\S]*\}/)![0]);
