@@ -22,33 +22,37 @@ export interface MCPServiceConfig {
 }
 
 // 创建 MCP 客户端连接
-export async function createMCPClient(command: string, args?: string[], env?: Record<string, string>): Promise<Client> {
-  // 过滤掉 undefined 的环境变量
-  const processEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined) {
-      processEnv[key] = value;
-    }
-  }
-  
-  // 从 env 中提取 cwd
-  const { cwd, ...restEnv } = env || {};
-  
+export async function createMCPClient(command: string, args: string[], env?: any) {
   const transport = new StdioClientTransport({
-    command: command,
-    args: args || [],
-    env: { ...processEnv, ...restEnv },
-    cwd: cwd as string | undefined
+    command,
+    args,
+    env: { ...process.env, ...env }
   });
-
+  
   const client = new Client({
     name: 'mcp-host-client',
-    version: '1.0.0'
+    version: '1.0.0',
   }, {
     capabilities: {}
   });
-
+  
   await client.connect(transport);
+  
+  // 添加获取工具列表的方法
+  (client as any).listTools = async () => {
+    try {
+      const response = await client.request({
+        method: 'tools/list',
+        params: {}
+      }, { timeout: 5000 });
+      // 确保返回格式正确
+      return { tools: response.tools || [] };
+    } catch (error) {
+      console.error('获取工具列表失败:', error);
+      return { tools: [] };
+    }
+  };
+  
   return client;
 }
 

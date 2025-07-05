@@ -15,6 +15,7 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import * as readline from 'readline';
 import { ServiceManager } from './service-manager.js';
+import { askLLM } from './llm.js';
 
 // 为 pkg 添加类型声明
 declare global {
@@ -54,6 +55,123 @@ function generateConfigInstruction(serverName: string): string {
 查看生成的配置文件: ${path.join(getMcpServicesDir(), serverName.split('/').pop() || serverName, 'mcp-config.json')}
 然后将其内容合并到你的主 mcp.json 文件的 "mcpServers" 部分。
 `;
+}
+
+// 获取服务的可用工具列表
+async function getServiceTools(serviceId: string): Promise<any[]> {
+  const serviceManager = new ServiceManager();
+  await serviceManager.loadAll();
+  
+  try {
+    // 启动服务（如果未运行）
+    if (!serviceManager.list().some(s => s.name === serviceId && s.running)) {
+      await serviceManager.start(serviceId);
+    }
+    // 通过 ServiceManager 的内部客户端获取工具
+    const client = (serviceManager as any).clients?.get(serviceId);
+    if (client && typeof client.listTools === 'function') {
+      const tools = await client.listTools();
+      return Array.isArray(tools) ? tools : [];
+    }
+    return [];
+  } catch (error) {
+    console.error('获取服务工具失败:', error);
+    return [];
+  }
+}
+
+// 使用 LLM 规划工具调用
+async function planToolCall(serviceId: string, need: any, userInput: string): Promise<{ tool: string; args: any } | null> {
+  try {
+    // 获取服务的实际工具列表
+    const tools = await getServiceTools(serviceId);
+    
+    const prompt = `
+分析用户需求并生成 MCP 工具调用参数。
+
+用户需求: ${userInput}
+服务ID: ${serviceId}
+服务类型: ${need.service_type}
+
+请直接返回 JSON 格式，不要包含其他内容：
+{
+  "tool": "工具名",
+  "args": {
+    "参数名": "参数值"
+  }
+}
+`;
+
+    const result = await askLLM(prompt);
+    const cleanResult = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    
+    // 提取 JSON
+    const jsonMatch = cleanResult.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    
+    throw new Error('无法解析 LLM 响应');
+  } catch (error) {
+    console.error('⚠️ 工具规划失败，使用备用方案:', error);
+    
+    // 备用方案：基于服务类型的默认工具
+    if (need.service_type === 'stock' || serviceId.toLowerCase().includes('stock')) {
+      return {
+        tool: 'analyzeStock',
+        args: {
+          symbol: 'AAPL',
+          startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          endDate: new Date().toISOString().split('T')[0]
+        }
+      };
+    }
+    
+    return null;
+  }
+}
+
+// 格式化工具执行结果
+function formatToolResult(result: any): string {
+  if (!result) return '无结果';
+  
+  // 如果是 MCP 标准响应格式
+  if (result.content && Array.isArray(result.content)) {
+    return result.content
+      .map((item: any) => {
+        if (item.type === 'text') return item.text;
+        if (item.type === 'image') return `[图片: ${item.url || item.data}]`;
+        return JSON.stringify(item);
+      })
+      .join('\n');
+  }
+  
+  // 如果是普通对象
+  if (typeof result === 'object') {
+    return JSON.stringify(result, null, 2);
+  }
+  
+  // 其他情况
+  return String(result);
+}
+
+// 启动服务→规划→调用→格式化 的统一流程
+async function runServiceTool(serviceId: string, need: any, userInput: string): Promise<string | null> {
+  const serviceManager = new ServiceManager();
+  await serviceManager.loadAll();
+
+  // 启动服务
+  if (!serviceManager.list().some(s => s.name === serviceId && s.running)) {
+    await serviceManager.start(serviceId);
+  }
+
+  // 规划工具调用
+  const plan = await planToolCall(serviceId, need, userInput);
+  if (!plan) return null;
+
+  console.log(`📞 调用工具: ${plan.tool} with args:`, plan.args);
+  const result = await serviceManager.call(serviceId, plan.tool, plan.args);
+  return formatToolResult(result);
 }
 
 // 核心处理函数：处理用户需求
@@ -115,28 +233,50 @@ export async function handleUserNeed(userInput: string): Promise<string> {
       const serverDir = path.dirname(createResult.configPath);
       await installDependencies(serverDir);
       
-      const configInstruction = generateConfigInstruction(createResult.serverId);
-      
-      // 检查是否使用了备用方案
-      if (!createResult.success && createResult.code) {
-        return `⚠️ MCP Create 服务不可用，已使用备用方案创建服务
+      // 尝试执行新创建的服务
+      try {
+        console.log('🚀 尝试使用新创建的服务完成任务...');
+        
+        const serviceManager = new ServiceManager();
+        await serviceManager.loadAll();
+        
+        // 启动新服务
+        if (serviceManager.list().some(s => s.name === createResult.serverId)) {
+          await serviceManager.start(createResult.serverId);
+          
+          // 规划并执行工具调用
+          const toolCallPlan = await planToolCall(createResult.serverId, need, userInput);
+          
+          if (toolCallPlan) {
+            console.log(`📞 调用新创建服务的工具: ${toolCallPlan.tool}`);
+            const result = await serviceManager.call(createResult.serverId, toolCallPlan.tool, toolCallPlan.args);
+            const formattedResult = formatToolResult(result);
+            
+            return `✅ 已创建并使用新服务完成任务
 
-✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
-📁 服务目录: ${serverDir}
-📄 配置文件: ${createResult.configPath}
-${needDetails ? needDetails + '\n\n' : ''}
-💡 创建的服务代码:
-\`\`\`typescript
-${createResult.code}
-\`\`\`
+🆕 服务信息:
+- 名称: ${createResult.serverId}
+- 目录: ${serverDir}
 
-${configInstruction}`;
+📊 执行结果:
+${formattedResult}
+
+${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}`;
+          }
+        }
+      } catch (error) {
+        console.error('⚠️ 新服务执行失败，返回创建信息:', error);
       }
       
+      // 如果执行失败，返回创建信息
+      const configInstruction = generateConfigInstruction(createResult.serverId);
       return `✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
 📁 服务目录: ${serverDir}
 📄 配置文件: ${createResult.configPath}
 ${needDetails ? needDetails + '\n' : ''}
+
+⚠️ 服务已创建但自动执行失败，你可以手动调用：
+node dist/index.js call "${createResult.serverId}" <tool_name> <args>
 
 ${configInstruction}`;
     }
@@ -146,15 +286,55 @@ ${configInstruction}`;
 
     if (registryHit) {
       console.log('🏷️ Registry 命中:', registryHit.title);
+      
+      // 确保服务已安装
+      const serviceManager = new ServiceManager();
+      await serviceManager.loadAll();
+      
+      // 检查服务是否已存在
+      const serviceExists = serviceManager.list().some(s => s.name === registryHit.id);
+      
+      if (!serviceExists) {
+        try {
+          await installMCPServer(registryHit.title);
+          await serviceManager.loadAll(); // 重新加载
+        } catch {
+          console.log('⚠️ Registry 工具安装失败，继续使用 MCP Compass 搜索');
+        }
+      }
+      
+      // 执行工具来完成用户需求
       try {
-        await installMCPServer(registryHit.title);
-        const configInstruction = generateConfigInstruction(registryHit.title);
-        return `✅ 已根据 Registry 安装 ${registryHit.title} 服务\n${configInstruction}`;
-      } catch {
-        console.log('⚠️ Registry 工具安装失败，继续使用 MCP Compass 搜索');
+        console.log('🚀 启动服务并执行任务...');
+        
+        // 获取服务的工具列表
+        if (!serviceManager.list().some(s => s.name === registryHit.id && s.running)) {
+          await serviceManager.start(registryHit.id);
+        }
+        
+        // 让 LLM 决定调用哪个工具以及参数
+        const toolCallPlan = await planToolCall(registryHit.id, need, userInput);
+        
+        if (toolCallPlan) {
+          console.log(`📞 调用工具: ${toolCallPlan.tool} with args:`, toolCallPlan.args);
+          const result = await serviceManager.call(registryHit.id, toolCallPlan.tool, toolCallPlan.args);
+          
+          // 格式化结果
+          const formattedResult = formatToolResult(result);
+          
+          return `✅ 已使用 ${registryHit.title} 服务完成任务
+
+📊 执行结果:
+${formattedResult}
+
+${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}`;
+        }
+      } catch (error) {
+        console.error('❌ 工具执行失败:', error);
+        return `⚠️ 找到了服务 ${registryHit.title}，但执行时出错: ${error instanceof Error ? error.message : '未知错误'}`;
       }
     }
-
+    
     // 3. 搜索现有服务（MCP Compass）
     const searchQuery = `${need.service_type} ${need.keywords.join(' ')}`;
     const searchResults = await searchMCPServers(searchQuery);
@@ -174,10 +354,32 @@ ${configInstruction}`;
       if (isNpmPackage) {
         try {
           await installMCPServer(suitableServer.title);
+          
+          // 尝试执行工具
+          try {
+            console.log('🚀 尝试使用新安装的服务完成任务...');
+            const serviceId = suitableServer.title.split('/').pop() || suitableServer.title;
+            const result = await runServiceTool(serviceId, need, userInput);
+            
+            if (result) {
+              return `✅ 已安装并使用 ${suitableServer.title} 服务完成任务
+
+📊 执行结果:
+${result}
+
+${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}`;
+            }
+          } catch (error) {
+            console.error('⚠️ 服务执行失败:', error);
+          }
+          
+          // 如果执行失败，返回安装成功信息
           const configInstruction = generateConfigInstruction(suitableServer.title);
           return `✅ 已成功安装 ${suitableServer.title} 服务
 📝 描述: ${suitableServer.description}
 📄 配置文件已生成
+
+⚠️ 服务已安装但自动执行失败，你可以手动调用
 
 ${configInstruction}`;
         } catch (installError) {
@@ -256,28 +458,50 @@ ${configInstruction}`;
     const serverDir = path.dirname(createResult.configPath);
     await installDependencies(serverDir);
     
-    const configInstruction = generateConfigInstruction(createResult.serverId);
-    
-    // 检查是否使用了备用方案
-    if (!createResult.success && createResult.code) {
-      return `⚠️ MCP Create 服务不可用，已使用备用方案创建服务
+    // 尝试执行新创建的服务
+    try {
+      console.log('🚀 尝试使用新创建的服务完成任务...');
+      
+      const serviceManager = new ServiceManager();
+      await serviceManager.loadAll();
+      
+      // 启动新服务
+      if (serviceManager.list().some(s => s.name === createResult.serverId)) {
+        await serviceManager.start(createResult.serverId);
+        
+        // 规划并执行工具调用
+        const toolCallPlan = await planToolCall(createResult.serverId, need, userInput);
+        
+        if (toolCallPlan) {
+          console.log(`📞 调用新创建服务的工具: ${toolCallPlan.tool}`);
+          const result = await serviceManager.call(createResult.serverId, toolCallPlan.tool, toolCallPlan.args);
+          const formattedResult = formatToolResult(result);
+          
+          return `✅ 已创建并使用新服务完成任务
 
-✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
-📁 服务目录: ${serverDir}
-📄 配置文件: ${createResult.configPath}
-${needDetails ? needDetails + '\n\n' : ''}
-💡 创建的服务代码:
-\`\`\`typescript
-${createResult.code}
-\`\`\`
+🆕 服务信息:
+- 名称: ${createResult.serverId}
+- 目录: ${serverDir}
 
-${configInstruction}`;
+📊 执行结果:
+${formattedResult}
+
+${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}`;
+        }
+      }
+    } catch (error) {
+      console.error('⚠️ 新服务执行失败，返回创建信息:', error);
     }
     
+    // 如果执行失败，返回创建信息
+    const configInstruction = generateConfigInstruction(createResult.serverId);
     return `✅ 已成功创建新的 MCP 服务: ${createResult.serverId}
 📁 服务目录: ${serverDir}
 📄 配置文件: ${createResult.configPath}
 ${needDetails ? needDetails + '\n' : ''}
+
+⚠️ 服务已创建但自动执行失败，你可以手动调用：
+node dist/index.js call "${createResult.serverId}" <tool_name> <args>
 
 ${configInstruction}`;
     

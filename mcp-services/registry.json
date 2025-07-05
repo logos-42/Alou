@@ -1,0 +1,20 @@
+[
+  {
+    "id": "music-learning-assistant",
+    "service_type": "music",
+    "title": "音乐学习助手",
+    "tags": ["音乐", "学习", "乐器", "小提琴", "钢琴", "吉他", "music", "learning", "instrument"]
+  },
+  {
+    "id": "server-filesystem",
+    "service_type": "filesystem",
+    "title": "@modelcontextprotocol/server-filesystem",
+    "tags": ["文件", "文件系统", "读写", "file", "filesystem", "io"]
+  },
+  {
+    "id": "stock-analyzer",
+    "service_type": "stock",
+    "title": "股票分析助手",
+    "tags": ["股票", "股价", "投资", "分析", "stock", "investment", "analysis"]
+  }
+] 

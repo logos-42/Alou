@@ -1,0 +1,8 @@
+{
+  "name": "server-browser",
+  "version": "1.0.0",
+  "description": "MCP service configuration for @modelcontextprotocol/server-browser",
+  "scripts": {
+    "start": "npx -y @modelcontextprotocol/server-browser"
+  }
+}

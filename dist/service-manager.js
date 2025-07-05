@@ -38,7 +38,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ServiceManager = void 0;
 const fs = __importStar(require("fs/promises"));
-const child_process_1 = require("child_process");
 const path_1 = __importDefault(require("path"));
 const mcp_client_js_1 = require("./mcp-client.js");
 class ServiceManager {
@@ -89,32 +88,24 @@ class ServiceManager {
             throw new Error(`服务未找到: ${name}`);
         if (this.procs.has(name))
             return; // already running
-        const proc = (0, child_process_1.spawn)(svc.config.command, svc.config.args, {
-            cwd: svc.config.cwd || path_1.default.dirname(svc.configPath),
-            env: { ...process.env, ...svc.config.env },
-            shell: true,
-            stdio: 'inherit'
-        });
-        this.procs.set(name, proc);
-        proc.on('exit', () => {
-            this.procs.delete(name);
-            const client = this.clients.get(name);
-            client?.close?.().catch(() => { });
-            this.clients.delete(name);
-        });
-        // 建立 MCP client
+        // 建立 MCP client（createMCPClient 内部会启动进程）
         const client = await (0, mcp_client_js_1.createMCPClient)(svc.config.command, svc.config.args, {
             ...svc.config.env,
             // 确保工作目录正确
             cwd: svc.config.cwd || path_1.default.dirname(svc.configPath)
         });
         this.clients.set(name, client);
+        // 标记服务为运行中（虽然没有保存进程引用，但客户端存在即表示运行中）
+        this.procs.set(name, {}); // 占位符，表示服务运行中
     }
     /** 停止服务并关闭客户端 */
     async stop(name) {
         const proc = this.procs.get(name);
         if (proc) {
-            proc.kill();
+            // 如果是真实的进程对象，调用 kill
+            if (proc.kill && typeof proc.kill === 'function') {
+                proc.kill();
+            }
             this.procs.delete(name);
         }
         const client = this.clients.get(name);

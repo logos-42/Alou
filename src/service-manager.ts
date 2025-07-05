@@ -62,26 +62,7 @@ export class ServiceManager {
     if (!svc) throw new Error(`服务未找到: ${name}`);
     if (this.procs.has(name)) return; // already running
 
-    const proc = spawn(
-      svc.config.command,
-      svc.config.args,
-      {
-        cwd: svc.config.cwd || path.dirname(svc.configPath),
-        env: { ...process.env, ...svc.config.env },
-        shell: true,
-        stdio: 'inherit'
-      }
-    );
-    this.procs.set(name, proc);
-
-    proc.on('exit', () => {
-      this.procs.delete(name);
-      const client = this.clients.get(name);
-      client?.close?.().catch(() => {});
-      this.clients.delete(name);
-    });
-
-    // 建立 MCP client
+    // 建立 MCP client（createMCPClient 内部会启动进程）
     const client = await createMCPClient(
       svc.config.command, 
       svc.config.args, 
@@ -92,13 +73,19 @@ export class ServiceManager {
       }
     );
     this.clients.set(name, client);
+    
+    // 标记服务为运行中（虽然没有保存进程引用，但客户端存在即表示运行中）
+    this.procs.set(name, {} as any); // 占位符，表示服务运行中
   }
 
   /** 停止服务并关闭客户端 */
   async stop(name: string): Promise<void> {
     const proc = this.procs.get(name);
     if (proc) {
-      proc.kill();
+      // 如果是真实的进程对象，调用 kill
+      if (proc.kill && typeof proc.kill === 'function') {
+        proc.kill();
+      }
       this.procs.delete(name);
     }
     const client = this.clients.get(name);
