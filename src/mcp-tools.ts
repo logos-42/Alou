@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { askLLM } from './llm-native.js';
 import { callMCPCompass, callMCPInstaller, callMCPCreate } from './mcp-client.js';
+import { addRegistry } from './registry.js';
 
 // 为 pkg 添加类型声明
 declare global {
@@ -564,6 +565,16 @@ export async function createMCPServer(
   
   const configPath = path.join(serverDir, 'mcp-config.json');
   await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+  
+  // 写入轻量 Registry（忽略错误）
+  try {
+    await addRegistry({
+      id: serverName,
+      service_type: serviceType || 'general',
+      title: serverName,
+      tags: [serviceType || 'general']
+    });
+  } catch {}
   
   // 返回结果
   return {

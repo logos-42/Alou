@@ -43,6 +43,7 @@ const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 const llm_native_js_1 = require("./llm-native.js");
 const mcp_client_js_1 = require("./mcp-client.js");
+const registry_js_1 = require("./registry.js");
 // 处理 pkg 打包后的路径问题
 const isPkg = typeof process.pkg !== 'undefined';
 const execDir = isPkg ? path.dirname(process.execPath) : process.cwd();
@@ -515,6 +516,16 @@ async function createMCPServer(language, code, serverName, serviceType) {
     };
     const configPath = path.join(serverDir, 'mcp-config.json');
     await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+    // 写入轻量 Registry（忽略错误）
+    try {
+        await (0, registry_js_1.addRegistry)({
+            id: serverName,
+            service_type: serviceType || 'general',
+            title: serverName,
+            tags: [serviceType || 'general']
+        });
+    }
+    catch { }
     // 返回结果
     return {
         serverId: serverName,

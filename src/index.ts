@@ -1,4 +1,5 @@
 import { parseUserNeed } from './llm-native.js';
+import { searchRegistry } from './registry.js';
 import { generateMCPCode } from './llm.js';
 import { 
   searchMCPServers, 
@@ -140,11 +141,25 @@ ${needDetails ? needDetails + '\n' : ''}
 ${configInstruction}`;
     }
     
-    // 2. 搜索现有服务
+    // 2. 先查询本地 Registry
+    const registryHit = await searchRegistry([need.service_type, ...need.keywords]);
+
+    if (registryHit) {
+      console.log('🏷️ Registry 命中:', registryHit.title);
+      try {
+        await installMCPServer(registryHit.title);
+        const configInstruction = generateConfigInstruction(registryHit.title);
+        return `✅ 已根据 Registry 安装 ${registryHit.title} 服务\n${configInstruction}`;
+      } catch {
+        console.log('⚠️ Registry 工具安装失败，继续使用 MCP Compass 搜索');
+      }
+    }
+
+    // 3. 搜索现有服务（MCP Compass）
     const searchQuery = `${need.service_type} ${need.keywords.join(' ')}`;
     const searchResults = await searchMCPServers(searchQuery);
     
-    // 3. 判断是否有合适的现有服务（降低阈值到 0.3，允许更多选择）
+    // 4. 判断是否有合适的现有服务（降低阈值到 0.3，允许更多选择）
     const suitableServer = searchResults.find(server => server.similarity_score >= 0.3);
     
     if (suitableServer) {

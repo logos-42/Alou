@@ -37,6 +37,7 @@ exports.main = void 0;
 exports.handleUserNeed = handleUserNeed;
 exports.startWebServer = startWebServer;
 const llm_native_js_1 = require("./llm-native.js");
+const registry_js_1 = require("./registry.js");
 const llm_js_1 = require("./llm.js");
 const mcp_tools_js_1 = require("./mcp-tools.js");
 const path = __importStar(require("path"));
@@ -147,10 +148,23 @@ ${needDetails ? needDetails + '\n' : ''}
 
 ${configInstruction}`;
         }
-        // 2. 搜索现有服务
+        // 2. 先查询本地 Registry
+        const registryHit = await (0, registry_js_1.searchRegistry)([need.service_type, ...need.keywords]);
+        if (registryHit) {
+            console.log('🏷️ Registry 命中:', registryHit.title);
+            try {
+                await (0, mcp_tools_js_1.installMCPServer)(registryHit.title);
+                const configInstruction = generateConfigInstruction(registryHit.title);
+                return `✅ 已根据 Registry 安装 ${registryHit.title} 服务\n${configInstruction}`;
+            }
+            catch {
+                console.log('⚠️ Registry 工具安装失败，继续使用 MCP Compass 搜索');
+            }
+        }
+        // 3. 搜索现有服务（MCP Compass）
         const searchQuery = `${need.service_type} ${need.keywords.join(' ')}`;
         const searchResults = await (0, mcp_tools_js_1.searchMCPServers)(searchQuery);
-        // 3. 判断是否有合适的现有服务（降低阈值到 0.3，允许更多选择）
+        // 4. 判断是否有合适的现有服务（降低阈值到 0.3，允许更多选择）
         const suitableServer = searchResults.find(server => server.similarity_score >= 0.3);
         if (suitableServer) {
             // 使用现有服务
