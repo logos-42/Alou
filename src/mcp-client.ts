@@ -38,21 +38,6 @@ export async function createMCPClient(command: string, args: string[], env?: any
   
   await client.connect(transport);
   
-  // 添加获取工具列表的方法
-  (client as any).listTools = async () => {
-    try {
-      const response = await client.request({
-        method: 'tools/list',
-        params: {}
-      }, { timeout: 5000 });
-      // 确保返回格式正确
-      return { tools: response.tools || [] };
-    } catch (error) {
-      console.error('获取工具列表失败:', error);
-      return { tools: [] };
-    }
-  };
-  
   return client;
 }
 

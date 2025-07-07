@@ -37,6 +37,7 @@ exports.addRegistry = addRegistry;
 exports.searchRegistry = searchRegistry;
 const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
+const llm_js_1 = require("./llm.js");
 const registryPath = path.join(process.cwd(), 'mcp-services', 'registry.json');
 async function readRegistry() {
     try {
@@ -63,56 +64,78 @@ async function searchRegistry(queryWords) {
         console.log('📭 Registry 为空，跳过本地搜索');
         return null;
     }
-    let best = null;
-    let bestScore = 0;
-    // 处理 queryWords，提取有意义的词
-    const cleanWords = [];
-    for (const word of queryWords) {
-        // 如果是一个长句子，拆分成单词
-        if (word.length > 10) {
-            cleanWords.push(...word.split(/[\s，。、]/g).filter(w => w.length > 1));
-        }
-        else {
-            cleanWords.push(word);
-        }
-    }
-    console.log('🔍 Registry 搜索关键词:', cleanWords);
-    for (const rec of list) {
-        const text = `${rec.tags.join(' ')} ${rec.service_type} ${rec.title} ${rec.id}`.toLowerCase();
-        let score = 0;
-        // 计算匹配分数
-        for (const word of cleanWords) {
-            const lowerWord = word.toLowerCase();
-            if (text.includes(lowerWord)) {
-                score += 1;
-                // 核心词汇加权
-                if (['music', '音乐', '小提琴', 'violin', '乐器', 'instrument'].includes(lowerWord)) {
-                    score += 3;
-                }
-                else if (['stock', '股票', 'analysis', '分析', 'market', '市场'].includes(lowerWord)) {
-                    score += 2;
-                }
-                else if (['学习', 'learn', 'learning', '练习', 'practice'].includes(lowerWord)) {
-                    score += 2;
+    console.log('🔍 Registry 搜索关键词:', queryWords);
+    try {
+        // 使用 AI 进行智能匹配
+        const userQuery = queryWords.join(' ');
+        const servicesInfo = list.map(rec => `ID: ${rec.id}\n类型: ${rec.service_type}\n标题: ${rec.title}\n标签: ${rec.tags.join(', ')}`).join('\n\n');
+        const prompt = `
+分析用户需求并找出最匹配的 MCP 服务。
+
+用户需求: ${userQuery}
+
+可用服务列表:
+${servicesInfo}
+
+请分析用户需求与每个服务的匹配程度，返回最佳匹配的服务。
+
+要求:
+1. 理解用户需求的语义含义
+2. 分析每个服务的功能和适用场景
+3. 计算匹配度分数 (0-100)
+4. 如果最高分数 >= 60，返回该服务ID；否则返回 null
+
+请直接返回JSON格式，不要包含其他内容：
+{
+  "best_match": "服务ID或null",
+  "score": 匹配分数(0-100),
+  "reason": "匹配原因"
+}
+`;
+        console.log('🤖 使用 AI 分析服务匹配度...');
+        const result = await (0, llm_js_1.askLLM)(prompt);
+        // 解析 AI 响应
+        const cleanResult = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const jsonMatch = cleanResult.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            const analysis = JSON.parse(jsonMatch[0]);
+            console.log('🧠 AI 分析结果:', analysis);
+            if (analysis.best_match && analysis.score >= 60) {
+                const matchedService = list.find(rec => rec.id === analysis.best_match);
+                if (matchedService) {
+                    console.log(`🎯 Registry AI 命中: ${matchedService.title} (分数: ${analysis.score})`);
+                    console.log(`💡 匹配原因: ${analysis.reason}`);
+                    return matchedService;
                 }
             }
         }
-        // 服务类型完全匹配额外加分
-        if (cleanWords.includes(rec.service_type)) {
-            score += 5;
+        console.log('❌ Registry AI 未找到匹配的服务');
+        return null;
+    }
+    catch (error) {
+        console.error('⚠️ Registry AI 匹配失败，使用备用方案:', error);
+        // 备用方案：简单的关键词匹配
+        let best = null;
+        let bestScore = 0;
+        for (const rec of list) {
+            const text = `${rec.tags.join(' ')} ${rec.service_type} ${rec.title} ${rec.id}`.toLowerCase();
+            let score = 0;
+            for (const word of queryWords) {
+                const lowerWord = word.toLowerCase();
+                if (text.includes(lowerWord)) {
+                    score += 1;
+                }
+            }
+            if (score > bestScore) {
+                best = rec;
+                bestScore = score;
+            }
         }
-        if (score > bestScore) {
-            best = rec;
-            bestScore = score;
+        if (bestScore > 0) {
+            console.log(`🎯 Registry 备用匹配: ${best.title} (分数: ${bestScore})`);
+            return best;
         }
+        return null;
     }
-    // 调试输出
-    if (bestScore > 0) {
-        console.log(`🎯 Registry 命中: ${best.title} (分数: ${bestScore})`);
-    }
-    else {
-        console.log('❌ Registry 未找到匹配的服务');
-    }
-    return bestScore > 0 ? best : null;
 }
 //# sourceMappingURL=registry.js.map

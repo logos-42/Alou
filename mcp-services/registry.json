@@ -1,20 +1,34 @@
 [
   {
-    "id": "music-learning-assistant",
-    "service_type": "music",
-    "title": "音乐学习助手",
-    "tags": ["音乐", "学习", "乐器", "小提琴", "钢琴", "吉他", "music", "learning", "instrument"]
-  },
-  {
     "id": "server-filesystem",
-    "service_type": "filesystem",
-    "title": "@modelcontextprotocol/server-filesystem",
-    "tags": ["文件", "文件系统", "读写", "file", "filesystem", "io"]
+    "service_type": "文件管理",
+    "title": "文件系统服务",
+    "tags": [
+      "文件",
+      "文件系统",
+      "读写",
+      "目录",
+      "列表",
+      "浏览",
+      "file",
+      "filesystem",
+      "io",
+      "directory",
+      "list",
+      "browse",
+      "文件管理",
+      "目录管理",
+      "文件浏览",
+      "文件列表"
+    ]
   },
+  
   {
-    "id": "stock-analyzer",
-    "service_type": "stock",
-    "title": "股票分析助手",
-    "tags": ["股票", "股价", "投资", "分析", "stock", "investment", "analysis"]
+    "id": "mcp-健康管理-1751775371430",
+    "service_type": "健康管理",
+    "title": "mcp-健康管理-1751775371430",
+    "tags": [
+      "健康管理"
+    ]
   }
-] 
+]

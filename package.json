@@ -125,13 +125,14 @@
   "description": "",
   "pkg": {
     "assets": [
-      "node_modules/@modelcontextprotocol/sdk/**/*",
       "node_modules/dotenv/**/*"
     ],
     "scripts": "dist/**/*.js",
     "targets": ["node18-win-x64"],
     "outputPath": ".",
-    "compress": "GZip"
+    "compress": false
   },
-  "bin": "dist/index.js"
+  "bin": {
+    "deepseekr1": "dist/index.js"
+  }
 }

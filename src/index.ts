@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { parseUserNeed } from './llm-native.js';
 import { searchRegistry } from './registry.js';
 import { generateMCPCode } from './llm.js';
@@ -58,34 +59,43 @@ function generateConfigInstruction(serverName: string): string {
 }
 
 // 获取服务的可用工具列表
-async function getServiceTools(serviceId: string): Promise<any[]> {
-  const serviceManager = new ServiceManager();
-  await serviceManager.loadAll();
-  
+async function getServiceTools(serviceId: string, serviceManager: ServiceManager): Promise<any[]> {
   try {
     // 启动服务（如果未运行）
     if (!serviceManager.list().some(s => s.name === serviceId && s.running)) {
+      console.log(`🚀 启动服务: ${serviceId}`);
       await serviceManager.start(serviceId);
     }
+    
     // 通过 ServiceManager 的内部客户端获取工具
     const client = (serviceManager as any).clients?.get(serviceId);
     if (client && typeof client.listTools === 'function') {
-      const tools = await client.listTools();
-      return Array.isArray(tools) ? tools : [];
+      console.log(`📋 获取 ${serviceId} 的工具列表...`);
+      const toolsResponse = await client.listTools();
+      const tools = toolsResponse?.tools || [];
+      console.log(`✅ 找到 ${tools.length} 个工具:`, tools.map((t: any) => t.name));
+      return tools;
+    } else {
+      console.log(`⚠️ 服务 ${serviceId} 的客户端未就绪或不支持 listTools`);
+      return [];
     }
-    return [];
   } catch (error) {
-    console.error('获取服务工具失败:', error);
+    console.error(`❌ 获取服务 ${serviceId} 工具失败:`, error);
     return [];
   }
 }
 
 // 使用 LLM 规划工具调用
-async function planToolCall(serviceId: string, need: any, userInput: string): Promise<{ tool: string; args: any } | null> {
+async function planToolCall(serviceId: string, need: any, userInput: string, serviceManager: ServiceManager): Promise<{ tool: string; args: any } | null> {
   try {
     // 获取服务的实际工具列表
-    const tools = await getServiceTools(serviceId);
+    const tools = await getServiceTools(serviceId, serviceManager);
     
+    // 格式化工具列表信息
+    const toolsInfo = tools.length > 0 
+      ? tools.map((tool: any) => `- ${tool.name}: ${tool.description || '无描述'}`).join('\n')
+      : '无可用工具';
+
     const prompt = `
 分析用户需求并生成 MCP 工具调用参数。
 
@@ -93,7 +103,10 @@ async function planToolCall(serviceId: string, need: any, userInput: string): Pr
 服务ID: ${serviceId}
 服务类型: ${need.service_type}
 
-请直接返回 JSON 格式，不要包含其他内容：
+可用工具列表:
+${toolsInfo}
+
+请根据用户需求选择最合适的工具，并生成相应的参数。直接返回 JSON 格式，不要包含其他内容：
 {
   "tool": "工具名",
   "args": {
@@ -115,17 +128,6 @@ async function planToolCall(serviceId: string, need: any, userInput: string): Pr
   } catch (error) {
     console.error('⚠️ 工具规划失败，使用备用方案:', error);
     
-    // 备用方案：基于服务类型的默认工具
-    if (need.service_type === 'stock' || serviceId.toLowerCase().includes('stock')) {
-      return {
-        tool: 'analyzeStock',
-        args: {
-          symbol: 'AAPL',
-          startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          endDate: new Date().toISOString().split('T')[0]
-        }
-      };
-    }
     
     return null;
   }
@@ -166,7 +168,7 @@ async function runServiceTool(serviceId: string, need: any, userInput: string): 
   }
 
   // 规划工具调用
-  const plan = await planToolCall(serviceId, need, userInput);
+  const plan = await planToolCall(serviceId, need, userInput, serviceManager);
   if (!plan) return null;
 
   console.log(`📞 调用工具: ${plan.tool} with args:`, plan.args);
@@ -245,7 +247,7 @@ export async function handleUserNeed(userInput: string): Promise<string> {
           await serviceManager.start(createResult.serverId);
           
           // 规划并执行工具调用
-          const toolCallPlan = await planToolCall(createResult.serverId, need, userInput);
+          const toolCallPlan = await planToolCall(createResult.serverId, need, userInput, serviceManager);
           
           if (toolCallPlan) {
             console.log(`📞 调用新创建服务的工具: ${toolCallPlan.tool}`);
@@ -313,7 +315,7 @@ ${configInstruction}`;
         }
         
         // 让 LLM 决定调用哪个工具以及参数
-        const toolCallPlan = await planToolCall(registryHit.id, need, userInput);
+        const toolCallPlan = await planToolCall(registryHit.id, need, userInput, serviceManager);
         
         if (toolCallPlan) {
           console.log(`📞 调用工具: ${toolCallPlan.tool} with args:`, toolCallPlan.args);
@@ -470,7 +472,7 @@ ${configInstruction}`;
         await serviceManager.start(createResult.serverId);
         
         // 规划并执行工具调用
-        const toolCallPlan = await planToolCall(createResult.serverId, need, userInput);
+        const toolCallPlan = await planToolCall(createResult.serverId, need, userInput, serviceManager);
         
         if (toolCallPlan) {
           console.log(`📞 调用新创建服务的工具: ${toolCallPlan.tool}`);

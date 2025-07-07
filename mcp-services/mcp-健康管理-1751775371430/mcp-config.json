@@ -1,0 +1,12 @@
+{
+  "mcp-健康管理-1751775371430": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "tsx",
+      "index.ts"
+    ],
+    "cwd": "D:\\AI\\alou1\\mcp-services\\mcp-健康管理-1751775371430"
+  }
+}

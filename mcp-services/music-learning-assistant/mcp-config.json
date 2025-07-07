@@ -1,6 +1,0 @@
-{
-  "music-learning-assistant": {
-    "command": "node",
-    "args": ["D:\\AI\\alou1\\node_modules\\tsx\\dist\\cli.mjs", "D:\\AI\\alou1\\mcp-services\\music-learning-assistant\\index.ts"]
-  }
-} 
