@@ -616,12 +616,12 @@ async function runCLI() {
 使用方法:
   1. 直接输入需求后按回车 (交互式模式)
   2. 先输入 exit 退出交互式模式
-  3. Web 服务: mcp-host --server [端口]
+  3. Web 服务: alou --server [端口]
   
 示例:
   我需要一个天气查询服务
   帮我创建一个翻译服务
-  mcp-host --server 3000
+  alou --server 3000
 `);
         // 启动交互式模式
         interactiveCLI();
