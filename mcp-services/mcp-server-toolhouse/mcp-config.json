@@ -1,0 +1,11 @@
+{
+  "mcp-server-toolhouse": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "mcp-server-toolhouse"
+    ]
+  }
+}

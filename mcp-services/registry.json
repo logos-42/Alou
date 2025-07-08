@@ -53,5 +53,13 @@
     "tags": [
       "semantic-scholar-fastmcp-mcp-server"
     ]
+  },
+  {
+    "id": "mcp-server-toolhouse",
+    "service_type": "general",
+    "title": "mcp-server-toolhouse",
+    "tags": [
+      "mcp-server-toolhouse"
+    ]
   }
 ]
