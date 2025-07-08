@@ -1,0 +1,11 @@
+{
+  "semantic-scholar-fastmcp-mcp-server": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "semantic-scholar-fastmcp-mcp-server"
+    ]
+  }
+}

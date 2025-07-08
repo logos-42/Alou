@@ -22,13 +22,36 @@
       "文件列表"
     ]
   },
-  
   {
     "id": "mcp-健康管理-1751775371430",
     "service_type": "健康管理",
     "title": "mcp-健康管理-1751775371430",
     "tags": [
       "健康管理"
+    ]
+  },
+  {
+    "id": "mcp-MCP服务器安装-1751944469448",
+    "service_type": "MCP服务器安装",
+    "title": "mcp-MCP服务器安装-1751944469448",
+    "tags": [
+      "MCP服务器安装"
+    ]
+  },
+  {
+    "id": "server-github",
+    "service_type": "general",
+    "title": "server-github",
+    "tags": [
+      "server-github"
+    ]
+  },
+  {
+    "id": "semantic-scholar-fastmcp-mcp-server",
+    "service_type": "general",
+    "title": "semantic-scholar-fastmcp-mcp-server",
+    "tags": [
+      "semantic-scholar-fastmcp-mcp-server"
     ]
   }
 ]

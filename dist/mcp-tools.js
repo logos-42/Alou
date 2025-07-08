@@ -64,8 +64,23 @@ async function checkMCPTool(toolName) {
 // MCP Compass - 搜索现有服务
 async function searchMCPServers(query) {
     console.log(`🔍 使用 MCP Compass 搜索服务: ${query}`);
+    // 如果查询包含中文字符，使用 LLM 翻译为英文再进行搜索
+    let compassQuery = query;
+    if (/[\u4e00-\u9fa5]/.test(query)) {
+        try {
+            const translationPrompt = `将以下中文关键词翻译成精准的英文关键词，用空格分隔，不要添加解释或多余内容：\n${query}`;
+            const translated = (await (0, llm_native_js_1.askLLM)(translationPrompt)).trim();
+            if (translated) {
+                compassQuery = translated;
+                console.log('🌐 已将中文查询翻译为英文:', compassQuery);
+            }
+        }
+        catch (e) {
+            console.log('⚠️ 翻译查询时出错，继续使用原始中文关键词');
+        }
+    }
     // 首先尝试调用真实的 MCP Compass 服务
-    const compassResult = await (0, mcp_client_js_1.callMCPCompass)(query);
+    const compassResult = await (0, mcp_client_js_1.callMCPCompass)(compassQuery);
     if (compassResult && compassResult.content) {
         // 解析 MCP Compass 返回的结果
         const servers = [];
@@ -290,6 +305,18 @@ async function installMCPServer(name) {
                             };
                             const configPath = path.join(serverDir, 'mcp-config.json');
                             await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+                            // 将服务写入本地 Registry（忽略错误防止安装流程中断）
+                            try {
+                                await (0, registry_js_1.addRegistry)({
+                                    id: serverName,
+                                    service_type: 'general',
+                                    title: serverName,
+                                    tags: [serverName]
+                                });
+                            }
+                            catch {
+                                // ignore registry write errors
+                            }
                             return `✅ 成功安装 ${name} 服务\n${item.text}\n📄 配置文件: ${configPath}`;
                         }
                     }
@@ -365,6 +392,18 @@ async function installMCPServer(name) {
     };
     const configPath = path.join(serverDir, 'mcp-config.json');
     await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
+    // 将服务写入本地 Registry
+    try {
+        await (0, registry_js_1.addRegistry)({
+            id: serverName,
+            service_type: 'general',
+            title: serverName,
+            tags: [serverName]
+        });
+    }
+    catch {
+        // ignore
+    }
     return `✅ 成功安装 ${name} 服务
 📄 配置文件: ${configPath}
 💡 提示: 服务将在首次使用时自动下载并运行`;
@@ -516,7 +555,7 @@ async function createMCPServer(language, code, serverName, serviceType) {
     };
     const configPath = path.join(serverDir, 'mcp-config.json');
     await fs.writeFile(configPath, JSON.stringify(mcpConfig, null, 2));
-    // 写入轻量 Registry（忽略错误）
+    // 将服务写入本地 Registry
     try {
         await (0, registry_js_1.addRegistry)({
             id: serverName,
@@ -525,7 +564,9 @@ async function createMCPServer(language, code, serverName, serviceType) {
             tags: [serviceType || 'general']
         });
     }
-    catch { }
+    catch {
+        // ignore
+    }
     // 返回结果
     return {
         serverId: serverName,
