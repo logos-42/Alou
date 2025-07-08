@@ -180,6 +180,53 @@ async function runServiceTool(serviceId, need, userInput) {
     const result = await serviceManager.call(serviceId, plan.tool, plan.args);
     return formatToolResult(result);
 }
+// 生成AI总结和引导回复
+async function generateAISummary(serviceName, serviceDescription, userInput, need, configPath, githubUrl) {
+    try {
+        const prompt = `
+用户刚刚成功安装了一个MCP服务，请生成一个友好的总结和引导回复。
+
+服务信息:
+- 服务名称: ${serviceName}
+- 服务描述: ${serviceDescription}
+- 用户原始需求: ${userInput}
+- 需求类型: ${need.service_type}
+- GitHub链接: ${githubUrl || '无'}
+
+请生成一个包含以下内容的回复:
+1. 🎉 庆祝成功安装
+2. 📚 简要介绍服务功能和价值
+3. ✨ 说明如何帮助用户完成任务
+4. 🚀 提供后续行动建议
+5. 💡 给出3-4个引导性问题，帮助用户充分利用这个工具
+
+要求:
+- 使用中文回复
+- 语调友好专业
+- 包含适当的emoji
+- 重点说明这个服务如何解决用户的具体需求
+- 引导问题要具体实用
+
+直接返回完整的回复内容，不要包含其他说明。
+`;
+        const summary = await (0, llm_js_2.askLLM)(prompt);
+        return summary.trim();
+    }
+    catch (error) {
+        console.error('⚠️ AI总结生成失败:', error);
+        // 返回一个简单的默认总结
+        return `�� **成功安装了您的专属助手！**
+
+✅ **${serviceName}** 已经准备就绪，可以帮助您处理 **${need.service_type}** 相关的任务。
+
+🚀 **接下来您可以：**
+1. 按照配置说明在 Cursor 中设置服务
+2. 尝试使用服务的各种功能
+3. 根据您的具体需求调整和优化
+
+💡 **有什么问题随时告诉我，我会帮您充分利用这个工具！**`;
+    }
+}
 // 核心处理函数：处理用户需求
 async function handleUserNeed(userInput) {
     try {
@@ -308,12 +355,15 @@ ${configInstruction}`;
                     const result = await serviceManager.call(registryHit.id, toolCallPlan.tool, toolCallPlan.args);
                     // 格式化结果
                     const formattedResult = formatToolResult(result);
+                    const aiSummary = await generateAISummary(registryHit.title, `${registryHit.service_type} - ${registryHit.tags.join(', ')}`, userInput, need);
                     return `✅ 已使用 ${registryHit.title} 服务完成任务
 
 📊 执行结果:
 ${formattedResult}
 
-${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}`;
+${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}
+
+${aiSummary}`;
                 }
             }
             catch (error) {
@@ -342,12 +392,15 @@ ${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}`;
                         const serviceId = suitableServer.title.split('/').pop() || suitableServer.title;
                         const result = await runServiceTool(serviceId, need, userInput);
                         if (result) {
+                            const aiSummary = await generateAISummary(suitableServer.title, suitableServer.description, userInput, need, undefined, suitableServer.github_url);
                             return `✅ 已安装并使用 ${suitableServer.title} 服务完成任务
 
 📊 执行结果:
 ${result}
 
-${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}`;
+${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}
+
+${aiSummary}`;
                         }
                     }
                     catch (error) {
@@ -355,13 +408,16 @@ ${needDetails ? '\n💡 需求分析:\n' + needDetails : ''}`;
                     }
                     // 如果执行失败，返回安装成功信息
                     const configInstruction = generateConfigInstruction(suitableServer.title);
+                    const aiSummary = await generateAISummary(suitableServer.title, suitableServer.description, userInput, need, undefined, suitableServer.github_url);
                     return `✅ 已成功安装 ${suitableServer.title} 服务
 📝 描述: ${suitableServer.description}
 📄 配置文件已生成
 
 ⚠️ 服务已安装但自动执行失败，你可以手动调用
 
-${configInstruction}`;
+${configInstruction}
+
+${aiSummary}`;
                 }
                 catch (installError) {
                     console.error('安装失败，尝试创建新服务:', installError);
@@ -390,12 +446,15 @@ ${configInstruction}`;
                     try {
                         await (0, mcp_tools_js_1.installMCPServer)(packageName);
                         const configInstruction = generateConfigInstruction(packageName);
+                        const aiSummary = await generateAISummary(packageName, suitableServer.description, userInput, need, undefined, suitableServer.github_url);
                         return `✅ 已成功安装 ${packageName} 服务
 📝 描述: ${suitableServer.description}
 📄 配置文件已生成
 🔗 GitHub: ${suitableServer.github_url}
 
-${configInstruction}`;
+${configInstruction}
+
+${aiSummary}`;
                     }
                     catch (installError) {
                         console.log(`⚠️ ${packageName} 安装失败，尝试下一个...`);
